@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Services\Inbox\ClaudeParser;
+use App\Services\Inbox\FakeParser;
+use App\Services\Inbox\ParserContract;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +18,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(ParserContract::class, fn () => match (config('lifeos.parser')) {
+            'claude' => new ClaudeParser,
+            default => new FakeParser,
+        });
     }
 
     /**

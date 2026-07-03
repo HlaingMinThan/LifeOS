@@ -1,13 +1,33 @@
 <?php
 
+use App\Http\Controllers\CareController;
+use App\Http\Controllers\HomeController;
+use App\Http\Controllers\IdeaController;
+use App\Http\Controllers\InboxController;
+use App\Http\Controllers\LedgerController;
+use App\Http\Controllers\TodoController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth'])->group(function () {
-    Route::inertia('/', 'os/Home')->name('home');
-    Route::inertia('/money', 'os/Money')->name('money');
-    Route::inertia('/todos', 'os/Todos')->name('todos');
-    Route::inertia('/care', 'os/Care')->name('care');
-    Route::inertia('/ideas', 'os/Ideas')->name('ideas');
+    Route::get('/', [HomeController::class, 'index'])->name('home');
+
+    Route::get('/money', [LedgerController::class, 'index'])->name('money');
+    Route::patch('/ledger/{entry}/toggle', [LedgerController::class, 'toggle'])->name('ledger.toggle');
+    Route::delete('/ledger/{entry}', [LedgerController::class, 'destroy'])->name('ledger.destroy');
+
+    Route::get('/todos', [TodoController::class, 'index'])->name('todos');
+    Route::patch('/todos/{todo}/toggle', [TodoController::class, 'toggle'])->name('todos.toggle');
+    Route::delete('/todos/{todo}', [TodoController::class, 'destroy'])->name('todos.destroy');
+
+    Route::get('/care', [CareController::class, 'index'])->name('care');
+
+    Route::get('/ideas', [IdeaController::class, 'index'])->name('ideas');
+    Route::delete('/ideas/{idea}', [IdeaController::class, 'destroy'])->name('ideas.destroy');
+
+    // Magic inbox: parse → confirm chip in the UI → apply → undo.
+    Route::post('/inbox/parse', [InboxController::class, 'parse'])->name('inbox.parse');
+    Route::post('/inbox/apply', [InboxController::class, 'apply'])->name('inbox.apply');
+    Route::post('/inbox/undo/{event}', [InboxController::class, 'undo'])->name('inbox.undo');
 
     // Starter-kit pages still link to the dashboard route.
     Route::redirect('/dashboard', '/')->name('dashboard');

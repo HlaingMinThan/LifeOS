@@ -1,12 +1,106 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { Send } from 'lucide-vue-next';
+import { Head, router } from '@inertiajs/vue3';
+import { Check, Loader2, RotateCcw, Send, X } from 'lucide-vue-next';
 import { ref } from 'vue';
+import { apiPost } from '@/lib/api';
+import { formatDate, formatMmk } from '@/lib/format';
+
+type LedgerEntry = {
+    id: number;
+    title: string;
+    amount_mmk: number;
+    due_date: string | null;
+    contact?: { name: string } | null;
+};
+type Todo = { id: number; title: string; bucket: string; due_date: string | null };
+type CareTask = { id: number; title: string };
+type Parsed = {
+    action: string;
+    target: string | null;
+    amount_mmk: number | null;
+    due: string | null;
+    bucket: string | null;
+    confidence: number;
+};
+
+defineProps<{
+    payables: LedgerEntry[];
+    receivables: LedgerEntry[];
+    today: Todo[];
+    careToday: CareTask[];
+    overdue: Todo[];
+}>();
+
+const ACTION_LABELS: Record<string, string> = {
+    mark_paid: 'Mark paid',
+    add_payable: 'You owe',
+    add_receivable: 'Owed to you',
+    income_received: 'Income received',
+    add_todo: 'New todo',
+    complete_todo: 'Complete todo',
+    add_care_task: 'New care task',
+    add_idea: 'Park idea',
+    unknown: 'Not sure…',
+};
 
 const text = ref('');
+const state = ref<'idle' | 'parsing' | 'confirm' | 'applying' | 'applied'>('idle');
+const parsed = ref<Parsed | null>(null);
+const rawText = ref('');
+const lastEventId = ref<number | null>(null);
+const error = ref('');
 
-// Day 2: POST /inbox/parse → confirm chip → /inbox/apply
-const submit = () => {};
+async function parse() {
+    if (!text.value.trim()) return;
+    error.value = '';
+    state.value = 'parsing';
+    try {
+        const res = await apiPost<{ raw_text: string; parsed: Parsed }>('/inbox/parse', {
+            text: text.value,
+        });
+        parsed.value = res.parsed;
+        rawText.value = res.raw_text;
+        state.value = 'confirm';
+    } catch (e) {
+        error.value = (e as Error).message;
+        state.value = 'idle';
+    }
+}
+
+async function apply() {
+    state.value = 'applying';
+    error.value = '';
+    try {
+        const res = await apiPost<{ event_id: number }>('/inbox/apply', {
+            raw_text: rawText.value,
+            parsed: parsed.value,
+        });
+        lastEventId.value = res.event_id;
+        state.value = 'applied';
+        text.value = '';
+        router.reload();
+    } catch (e) {
+        error.value = (e as Error).message;
+        state.value = 'confirm';
+    }
+}
+
+async function undo() {
+    if (!lastEventId.value) return;
+    try {
+        await apiPost(`/inbox/undo/${lastEventId.value}`, {});
+        dismiss();
+        router.reload();
+    } catch (e) {
+        error.value = (e as Error).message;
+    }
+}
+
+function dismiss() {
+    state.value = 'idle';
+    parsed.value = null;
+    lastEventId.value = null;
+}
 </script>
 
 <template>
@@ -17,39 +111,138 @@ const submit = () => {};
         Everything that needs you, on one screen.
     </p>
 
-    <form class="mt-4 flex gap-2" @submit.prevent="submit">
+    <form class="mt-4 flex gap-2" @submit.prevent="parse">
         <input
             v-model="text"
             type="text"
             placeholder="paid gon khaung 500k…"
             class="h-12 flex-1 rounded-xl border border-input bg-card px-4 text-base shadow-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+            :disabled="state === 'parsing' || state === 'applying'"
         />
         <button
             type="submit"
             class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm disabled:opacity-50"
-            :disabled="!text.trim()"
+            :disabled="!text.trim() || state === 'parsing'"
         >
-            <Send class="h-5 w-5" />
+            <Loader2 v-if="state === 'parsing'" class="h-5 w-5 animate-spin" />
+            <Send v-else class="h-5 w-5" />
         </button>
     </form>
 
+    <p v-if="error" class="mt-2 text-sm text-red-500">{{ error }}</p>
+
+    <!-- Confirm chip: nothing is written until this is accepted -->
+    <div
+        v-if="state === 'confirm' || state === 'applying'"
+        class="mt-3 rounded-xl border border-primary/40 bg-primary/5 p-4"
+    >
+        <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0">
+                <span class="text-xs font-medium uppercase tracking-wide text-primary">
+                    {{ ACTION_LABELS[parsed?.action ?? 'unknown'] }}
+                </span>
+                <p class="mt-1 truncate font-medium">
+                    {{ parsed?.target ?? '—' }}
+                    <span v-if="parsed?.amount_mmk" class="text-muted-foreground">
+                        · {{ formatMmk(parsed.amount_mmk) }}
+                    </span>
+                </p>
+                <p v-if="parsed?.due" class="text-xs text-muted-foreground">
+                    Due {{ formatDate(parsed.due) }}
+                </p>
+            </div>
+            <div class="flex shrink-0 gap-2">
+                <button
+                    class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-50"
+                    :disabled="state === 'applying' || parsed?.action === 'unknown'"
+                    @click="apply"
+                >
+                    <Loader2 v-if="state === 'applying'" class="h-4 w-4 animate-spin" />
+                    <Check v-else class="h-4 w-4" />
+                </button>
+                <button
+                    class="flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground"
+                    @click="dismiss"
+                >
+                    <X class="h-4 w-4" />
+                </button>
+            </div>
+        </div>
+        <p v-if="parsed && parsed.confidence < 0.7" class="mt-2 text-xs text-amber-500">
+            Low confidence — double-check before confirming.
+        </p>
+    </div>
+
+    <!-- Applied: one-tap undo -->
+    <div
+        v-if="state === 'applied'"
+        class="mt-3 flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/5 p-3"
+    >
+        <span class="text-sm text-green-600 dark:text-green-400">Applied ✓</span>
+        <div class="flex gap-3">
+            <button class="flex items-center gap-1 text-sm text-muted-foreground" @click="undo">
+                <RotateCcw class="h-3.5 w-3.5" /> Undo
+            </button>
+            <button class="text-sm text-muted-foreground" @click="dismiss">
+                <X class="h-4 w-4" />
+            </button>
+        </div>
+    </div>
+
     <div class="mt-6 space-y-4">
-        <section
-            v-for="section in [
-                { title: 'You owe', empty: 'No open payables' },
-                { title: 'Owed to you', empty: 'No open receivables' },
-                { title: 'Today', empty: 'Nothing due today' },
-                { title: 'Overdue', empty: 'Nothing overdue 🎉' },
-            ]"
-            :key="section.title"
-            class="rounded-xl border border-border bg-card p-4"
-        >
-            <h2 class="text-sm font-medium text-muted-foreground">
-                {{ section.title }}
-            </h2>
-            <p class="mt-2 text-sm text-muted-foreground/70">
-                {{ section.empty }}
+        <section class="rounded-xl border border-border bg-card p-4">
+            <h2 class="text-sm font-medium text-muted-foreground">You owe</h2>
+            <p v-if="!payables.length" class="mt-2 text-sm text-muted-foreground/70">
+                No open payables
             </p>
+            <ul v-else class="mt-2 divide-y divide-border">
+                <li v-for="e in payables" :key="e.id" class="flex justify-between py-2 text-sm">
+                    <span class="truncate">{{ e.contact?.name ?? e.title }}</span>
+                    <span class="ml-2 shrink-0 font-medium">{{ formatMmk(e.amount_mmk) }}</span>
+                </li>
+            </ul>
+        </section>
+
+        <section class="rounded-xl border border-border bg-card p-4">
+            <h2 class="text-sm font-medium text-muted-foreground">Owed to you</h2>
+            <p v-if="!receivables.length" class="mt-2 text-sm text-muted-foreground/70">
+                No open receivables
+            </p>
+            <ul v-else class="mt-2 divide-y divide-border">
+                <li v-for="e in receivables" :key="e.id" class="flex justify-between py-2 text-sm">
+                    <span class="truncate">{{ e.contact?.name ?? e.title }}</span>
+                    <span class="ml-2 shrink-0 font-medium">{{ formatMmk(e.amount_mmk) }}</span>
+                </li>
+            </ul>
+        </section>
+
+        <section class="rounded-xl border border-border bg-card p-4">
+            <h2 class="text-sm font-medium text-muted-foreground">Today</h2>
+            <p
+                v-if="!today.length && !careToday.length"
+                class="mt-2 text-sm text-muted-foreground/70"
+            >
+                Nothing due today
+            </p>
+            <ul v-else class="mt-2 divide-y divide-border">
+                <li v-for="t in careToday" :key="`c${t.id}`" class="py-2 text-sm">
+                    💗 {{ t.title }}
+                </li>
+                <li v-for="t in today" :key="t.id" class="py-2 text-sm">{{ t.title }}</li>
+            </ul>
+        </section>
+
+        <section class="rounded-xl border border-border bg-card p-4">
+            <h2 class="text-sm font-medium text-muted-foreground">Overdue</h2>
+            <p v-if="!overdue.length" class="mt-2 text-sm text-muted-foreground/70">
+                Nothing overdue 🎉
+            </p>
+            <ul v-else class="mt-2 divide-y divide-border">
+                <li v-for="t in overdue" :key="t.id" class="flex justify-between py-2 text-sm">
+                    <span class="truncate">{{ t.title }}</span>
+                    <span class="ml-2 shrink-0 text-red-500">{{ formatDate(t.due_date) }}</span>
+                </li>
+            </ul>
         </section>
     </div>
 </template>

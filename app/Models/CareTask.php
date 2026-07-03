@@ -5,8 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Carbon;
 
 class CareTask extends Model
 {
@@ -34,7 +34,7 @@ class CareTask extends Model
      * Compute the run after $from. Random schedules pick a fresh offset
      * every time — that is what keeps surprises unpredictable.
      */
-    public function nextRunAfter(Carbon $from): Carbon
+    public function nextRunAfter(CarbonInterface $from): CarbonInterface
     {
         $time = $this->time_of_day ?? '09:00:00';
 
