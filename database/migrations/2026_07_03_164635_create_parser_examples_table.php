@@ -6,22 +6,18 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('ideas', function (Blueprint $table) {
+        Schema::create('parser_examples', function (Blueprint $table) {
             $table->id();
+            $table->text('raw_text');
+            $table->json('corrected_json'); // the parse the user confirmed after fixing
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('ideas');
+        Schema::dropIfExists('parser_examples');
     }
 };

@@ -5,20 +5,21 @@ namespace Database\Factories;
 use App\Models\LedgerEntry;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * @extends Factory<LedgerEntry>
- */
+/** @extends Factory<LedgerEntry> */
 class LedgerEntryFactory extends Factory
 {
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
         return [
-            //
+            'direction' => fake()->randomElement(['payable', 'receivable']),
+            'title' => fake()->sentence(3),
+            'amount_mmk' => fake()->numberBetween(1, 50) * 10000,
+            'status' => 'open',
         ];
+    }
+
+    public function paid(): static
+    {
+        return $this->state(fn () => ['status' => 'paid', 'paid_at' => now()]);
     }
 }

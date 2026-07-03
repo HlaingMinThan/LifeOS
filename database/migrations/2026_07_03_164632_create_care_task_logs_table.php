@@ -6,22 +6,19 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('care_tasks', function (Blueprint $table) {
+        Schema::create('care_task_logs', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('care_task_id')->constrained()->cascadeOnDelete();
+            $table->timestamp('ran_at');
+            $table->string('status')->default('done'); // done | skipped
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('care_tasks');
+        Schema::dropIfExists('care_task_logs');
     }
 };

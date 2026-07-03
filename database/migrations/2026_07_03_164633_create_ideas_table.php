@@ -6,22 +6,20 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('parser_examples', function (Blueprint $table) {
+        Schema::create('ideas', function (Blueprint $table) {
             $table->id();
+            $table->string('title');
+            $table->text('note')->nullable();
+            $table->string('status')->default('parked'); // parked | active | dropped
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('parser_examples');
+        Schema::dropIfExists('ideas');
     }
 };

@@ -6,20 +6,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('todos', function (Blueprint $table) {
             $table->id();
+            $table->string('title');
+            $table->string('bucket')->default('personal'); // work | personal | money_task
+            $table->string('status')->default('open'); // open | done
+            $table->date('due_date')->nullable();
+            $table->timestamp('done_at')->nullable();
             $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['status', 'bucket']);
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('todos');

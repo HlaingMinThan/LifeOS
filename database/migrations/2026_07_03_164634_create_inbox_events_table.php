@@ -6,20 +6,21 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('inbox_events', function (Blueprint $table) {
             $table->id();
+            $table->text('raw_text');
+            $table->json('parsed_json');
+            $table->boolean('applied')->default(false);
+            // What the apply step touched, so undo knows its exact target.
+            $table->string('subject_type')->nullable();
+            $table->unsignedBigInteger('subject_id')->nullable();
+            $table->timestamp('reverted_at')->nullable();
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('inbox_events');

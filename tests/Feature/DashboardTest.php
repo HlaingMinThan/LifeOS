@@ -16,12 +16,13 @@ class DashboardTest extends TestCase
         $response->assertRedirect(route('login'));
     }
 
-    public function test_authenticated_users_can_visit_the_dashboard()
+    public function test_dashboard_redirects_to_home()
     {
         $user = User::factory()->create();
         $this->actingAs($user);
 
+        // The old starter-kit dashboard now lives at the catch-up home screen.
         $response = $this->get(route('dashboard'));
-        $response->assertOk();
+        $response->assertRedirect('/');
     }
 }
