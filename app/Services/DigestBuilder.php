@@ -8,7 +8,8 @@ use App\Models\Todo;
 
 /**
  * The catch-up screen as text — sent as the 7 AM Telegram digest
- * and on demand via /today.
+ * and on demand via /today. Money and todos dated in the future stay
+ * out of today's digest; they appear via /tomorrow and /todobydate.
  */
 class DigestBuilder
 {
@@ -44,7 +45,12 @@ class DigestBuilder
             }
         }
 
-        $payables = LedgerEntry::open()->payable()->with('contact')->get();
+        // Money dated in the future belongs to that day's view, not today's.
+        $relevantToday = fn ($query) => $query->where(
+            fn ($q) => $q->whereNull('due_date')->orWhereDate('due_date', '<=', today()),
+        );
+
+        $payables = $relevantToday(LedgerEntry::open()->payable())->with('contact')->get();
         if ($payables->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '💸 You owe ('.number_format($payables->sum('amount_mmk')).' Ks):';
@@ -53,7 +59,7 @@ class DigestBuilder
             }
         }
 
-        $receivables = LedgerEntry::open()->receivable()->with('contact')->get();
+        $receivables = $relevantToday(LedgerEntry::open()->receivable())->with('contact')->get();
         if ($receivables->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '💰 Owed to you ('.number_format($receivables->sum('amount_mmk')).' Ks):';
@@ -92,6 +98,17 @@ class DigestBuilder
             foreach ($todos as $todo) {
                 $mark = $todo->status === 'done' ? '✅' : '⭕';
                 $lines[] = "  {$mark} {$todo->title}";
+            }
+        }
+
+        $money = LedgerEntry::open()->whereDate('due_date', $date)->with('contact')->get();
+        if ($money->isNotEmpty()) {
+            $lines[] = '';
+            $lines[] = '💵 Money due:';
+            foreach ($money as $entry) {
+                $arrow = $entry->direction === 'payable' ? '→ pay' : '← receive';
+                $lines[] = '  • '.($entry->contact?->name ?? $entry->title).' — '
+                    .number_format($entry->amount_mmk)." Ks {$arrow}";
             }
         }
 

@@ -38,4 +38,32 @@ class DigestTest extends TestCase
     {
         $this->assertStringContainsString('Nothing needs you today', app(DigestBuilder::class)->build());
     }
+
+    public function test_future_dated_money_stays_out_of_today(): void
+    {
+        LedgerEntry::factory()->create([
+            'direction' => 'receivable', 'title' => 'Cargo Pro income',
+            'amount_mmk' => 780000, 'due_date' => today()->addDay(),
+        ]);
+        LedgerEntry::factory()->create([
+            'direction' => 'receivable', 'title' => 'No-date debt', 'amount_mmk' => 50000,
+        ]);
+
+        $digest = app(DigestBuilder::class)->build();
+
+        $this->assertStringNotContainsString('Cargo Pro income', $digest);
+        $this->assertStringContainsString('No-date debt', $digest); // undated stays visible
+    }
+
+    public function test_by_date_view_shows_money_due_that_day(): void
+    {
+        LedgerEntry::factory()->create([
+            'direction' => 'receivable', 'title' => 'Cargo Pro income',
+            'amount_mmk' => 780000, 'due_date' => today()->addDay(),
+        ]);
+
+        $view = app(DigestBuilder::class)->forDate(today()->addDay());
+
+        $this->assertStringContainsString('Cargo Pro income — 780,000 Ks ← receive', $view);
+    }
 }
