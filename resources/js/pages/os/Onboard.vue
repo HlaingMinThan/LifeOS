@@ -73,7 +73,7 @@ async function confirmAll() {
 <template>
     <Head title="Import" />
 
-    <h1 class="text-2xl font-semibold">Brain dump</h1>
+    <h1 class="text-2xl font-bold text-gradient-brand">Brain dump</h1>
     <p class="mt-1 text-sm text-muted-foreground">
         Paste everything — one item per line, any language. Review, then confirm.
     </p>
@@ -88,7 +88,7 @@ async function confirmAll() {
             class="mt-4 w-full rounded-xl border border-input bg-card p-4 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
         ></textarea>
         <button
-            class="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-medium text-primary-foreground disabled:opacity-50"
+            class="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-brand font-medium text-white shadow-md shadow-fuchsia-500/20 disabled:opacity-50"
             :disabled="!text.trim() || state === 'parsing'"
             @click="parseDump"
         >
@@ -139,7 +139,7 @@ async function confirmAll() {
             </li>
         </ul>
         <button
-            class="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-medium text-primary-foreground disabled:opacity-50"
+            class="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-brand font-medium text-white shadow-md shadow-fuchsia-500/20 disabled:opacity-50"
             :disabled="!items.length || state === 'applying'"
             @click="confirmAll"
         >

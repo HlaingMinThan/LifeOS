@@ -118,7 +118,7 @@ function dismiss() {
 
     <div class="flex items-start justify-between">
         <div>
-            <h1 class="text-2xl font-semibold">Catch up</h1>
+            <h1 class="text-2xl font-bold text-gradient-brand">Catch up</h1>
             <p class="mt-1 text-sm text-muted-foreground">
                 Everything that needs you, on one screen.
             </p>
@@ -141,7 +141,7 @@ function dismiss() {
         />
         <button
             type="submit"
-            class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm disabled:opacity-50"
+            class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-brand text-white shadow-md shadow-fuchsia-500/20 transition-transform active:scale-95 disabled:opacity-50"
             :disabled="!text.trim() || state === 'parsing'"
         >
             <Loader2 v-if="state === 'parsing'" class="h-5 w-5 animate-spin" />
@@ -152,6 +152,7 @@ function dismiss() {
     <p v-if="error" class="mt-2 text-sm text-red-500">{{ error }}</p>
 
     <!-- Confirm chip: editable — nothing is written until this is accepted -->
+    <Transition name="form">
     <div
         v-if="(state === 'confirm' || state === 'applying') && parsed"
         class="mt-3 rounded-xl border border-primary/40 bg-primary/5 p-4"
@@ -228,8 +229,10 @@ function dismiss() {
             Low confidence — double-check before confirming.
         </p>
     </div>
+    </Transition>
 
     <!-- Applied: one-tap undo -->
+    <Transition name="form">
     <div
         v-if="state === 'applied'"
         class="mt-3 flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/5 p-3"
@@ -244,6 +247,7 @@ function dismiss() {
             </button>
         </div>
     </div>
+    </Transition>
 
     <div class="mt-6 space-y-4">
         <section class="rounded-xl border border-border bg-card p-4">

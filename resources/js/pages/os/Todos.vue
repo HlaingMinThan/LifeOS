@@ -83,13 +83,13 @@ const inBucket = (bucket: string) => props.todos.filter((t) => t.bucket === buck
 
     <div class="flex items-start justify-between">
         <div>
-            <h1 class="text-2xl font-semibold">Todos</h1>
+            <h1 class="text-2xl font-bold text-gradient-brand">Todos</h1>
             <p class="mt-1 text-sm text-muted-foreground">
                 Swipe right = done · swipe left = delete · ✎ to edit.
             </p>
         </div>
         <button
-            class="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+            class="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-white shadow-md shadow-fuchsia-500/20 transition-transform active:scale-95"
             @click="startNew"
         >
             <Plus class="h-5 w-5" />
@@ -97,6 +97,7 @@ const inBucket = (bucket: string) => props.todos.filter((t) => t.bucket === buck
     </div>
 
     <!-- Quick create -->
+    <Transition name="form">
     <div v-if="showNewForm" class="mt-4 space-y-2 rounded-xl border border-primary/40 bg-card p-3">
         <input
             v-model="form.title"
@@ -132,7 +133,7 @@ const inBucket = (bucket: string) => props.todos.filter((t) => t.bucket === buck
                 <option value="money_task">Money</option>
             </select>
             <button
-                class="rounded-lg bg-primary px-4 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
+                class="rounded-lg bg-gradient-brand px-4 py-1.5 text-sm text-white disabled:opacity-50"
                 :disabled="!form.title.trim()"
                 @click="saveForm"
             >
@@ -146,6 +147,7 @@ const inBucket = (bucket: string) => props.todos.filter((t) => t.bucket === buck
             </button>
         </div>
     </div>
+    </Transition>
 
     <div
         v-if="!todos.length && !showNewForm"

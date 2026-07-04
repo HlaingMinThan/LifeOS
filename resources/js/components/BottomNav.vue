@@ -28,11 +28,20 @@ const isActive = (href: string) =>
                 class="flex flex-col items-center gap-1 py-2 text-xs transition-colors"
                 :class="
                     isActive(tab.href)
-                        ? 'text-primary'
+                        ? 'font-medium text-primary'
                         : 'text-muted-foreground hover:text-foreground'
                 "
             >
-                <component :is="tab.icon" class="h-5 w-5" />
+                <span
+                    class="flex h-7 w-12 items-center justify-center rounded-full transition-all"
+                    :class="
+                        isActive(tab.href)
+                            ? 'bg-gradient-brand text-white shadow-md shadow-fuchsia-500/25'
+                            : ''
+                    "
+                >
+                    <component :is="tab.icon" class="h-5 w-5" />
+                </span>
                 <span>{{ tab.label }}</span>
             </Link>
         </div>

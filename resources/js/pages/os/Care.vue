@@ -100,13 +100,13 @@ function scheduleSummary(t: CareTask): string {
 
     <div class="flex items-start justify-between">
         <div>
-            <h1 class="text-2xl font-semibold">Care</h1>
+            <h1 class="text-2xl font-bold text-gradient-brand">Care</h1>
             <p class="mt-1 text-sm text-muted-foreground">
                 Recurring care tasks and surprises.
             </p>
         </div>
         <button
-            class="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+            class="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-white shadow-md shadow-fuchsia-500/20 transition-transform active:scale-95"
             @click="openNew"
         >
             <Plus class="h-5 w-5" />
@@ -114,6 +114,7 @@ function scheduleSummary(t: CareTask): string {
     </div>
 
     <!-- Add / edit form -->
+    <Transition name="form">
     <div v-if="showForm" class="mt-4 space-y-2 rounded-xl border border-primary/40 bg-card p-4">
         <input
             v-model="form.title"
@@ -164,7 +165,7 @@ function scheduleSummary(t: CareTask): string {
         </div>
         <div class="flex gap-2 pt-1">
             <button
-                class="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                class="flex-1 rounded-lg bg-gradient-brand py-2 text-sm font-medium text-white disabled:opacity-50"
                 :disabled="!form.title.trim()"
                 @click="save"
             >
@@ -178,6 +179,7 @@ function scheduleSummary(t: CareTask): string {
             </button>
         </div>
     </div>
+    </Transition>
 
     <div
         v-if="!tasks.length && !showForm"

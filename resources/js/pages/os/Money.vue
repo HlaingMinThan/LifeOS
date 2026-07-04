@@ -81,11 +81,11 @@ const section = (direction: string) =>
 
     <div class="flex items-start justify-between">
         <div>
-            <h1 class="text-2xl font-semibold">Money</h1>
+            <h1 class="text-2xl font-bold text-gradient-brand">Money</h1>
             <p class="mt-1 text-sm text-muted-foreground">Payables and receivables.</p>
         </div>
         <button
-            class="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+            class="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-white shadow-md shadow-fuchsia-500/20 transition-transform active:scale-95"
             @click="startNew()"
         >
             <Plus class="h-5 w-5" />
@@ -93,6 +93,7 @@ const section = (direction: string) =>
     </div>
 
     <!-- Create / edit form -->
+    <Transition name="form">
     <div
         v-if="showNewForm || editingId"
         class="mt-4 space-y-2 rounded-xl border border-primary/40 bg-card p-3"
@@ -152,7 +153,7 @@ const section = (direction: string) =>
         ></textarea>
         <div class="flex gap-2">
             <button
-                class="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                class="flex-1 rounded-lg bg-gradient-brand py-2 text-sm font-medium text-white disabled:opacity-50"
                 :disabled="!form.title.trim() || !form.amount_mmk"
                 @click="saveForm"
             >
@@ -166,6 +167,7 @@ const section = (direction: string) =>
             </button>
         </div>
     </div>
+    </Transition>
 
     <div
         v-if="!entries.length && !showNewForm"

@@ -4,8 +4,8 @@
     "description": "Personal life management — money, todos, care, ideas.",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#0f172a",
-    "theme_color": "#0f172a",
+    "background_color": "#150b1e",
+    "theme_color": "#150b1e",
     "icons": [
         {
             "src": "/icons/icon-192.png",

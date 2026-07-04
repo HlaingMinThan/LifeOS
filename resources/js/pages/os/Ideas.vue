@@ -13,7 +13,7 @@ const remove = (i: Idea) =>
 <template>
     <Head title="Ideas" />
 
-    <h1 class="text-2xl font-semibold">Ideas</h1>
+    <h1 class="text-2xl font-bold text-gradient-brand">Ideas</h1>
     <p class="mt-1 text-sm text-muted-foreground">The parking lot.</p>
 
     <div
