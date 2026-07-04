@@ -74,6 +74,7 @@ class ClaudeParser implements ParserContract
             ->implode("\n\n");
 
         $today = now()->toDateString();
+        $tomorrow = now()->addDay()->toDateString();
         $nextFriday = now()->next(5)->toDateString();
 
         return <<<PROMPT
@@ -91,6 +92,18 @@ Open todos: {$todos}
 
 Match targets against the known lists above (fuzzy, either script).
 If nothing matches, treat as a new record.
+
+Target rules:
+- Matching an existing record (mark_paid, complete_todo, income_received):
+  return that record's exact title or the contact's canonical name.
+- Creating a NEW record (add_todo, add_idea, add_care_task, add_payable,
+  add_receivable): keep "target" in the user's own words and script,
+  exactly as written. NEVER translate, paraphrase, or reword — copy the
+  user's words verbatim, keeping English words in English and Burmese
+  words in Burmese. The user must recognize their own phrasing later.
+  Only strip amounts and dates.
+  For new ledger entries where the target is a person, use the contact
+  name only.
 
 Schema:
 {"action": one of [mark_paid, add_payable, add_receivable, income_received,
@@ -114,13 +127,16 @@ EXAMPLES:
 → {"action":"complete_todo","target":"FB page video content","bucket":"work","confidence":0.9}
 
 "သောကြာနေ့ ပန်းစည်း ပို့ရန်"
-→ {"action":"add_care_task","target":"Send flowers","due":"{$nextFriday}","confidence":0.9}
+→ {"action":"add_care_task","target":"ပန်းစည်း ပို့ရန်","due":"{$nextFriday}","confidence":0.9}
 
 "arkar ဆီက 1 သိန်း ရစရာရှိတယ်"
 → {"action":"add_receivable","target":"Arkar","amount_mmk":100000,"confidence":0.9}
 
 "mushroom idea မှတ်ထား"
-→ {"action":"add_idea","target":"Mushroom selling","confidence":0.9}
+→ {"action":"add_idea","target":"mushroom idea","confidence":0.9}
+
+"mom အတွက် ဆေးဝယ်ရန် မနက်ဖြန်"
+→ {"action":"add_todo","target":"mom အတွက် ဆေးဝယ်ရန်","due":"{$tomorrow}","bucket":"personal","confidence":0.85}
 
 {$learned}
 PROMPT;
