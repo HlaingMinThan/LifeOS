@@ -5,6 +5,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\IdeaController;
 use App\Http\Controllers\InboxController;
 use App\Http\Controllers\LedgerController;
+use App\Http\Controllers\OnboardController;
 use App\Http\Controllers\TodoController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,6 +24,11 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/ideas', [IdeaController::class, 'index'])->name('ideas');
     Route::delete('/ideas/{idea}', [IdeaController::class, 'destroy'])->name('ideas.destroy');
+
+    // Brain-dump onboarding: paste everything once, review, confirm.
+    Route::get('/onboard', [OnboardController::class, 'index'])->name('onboard');
+    Route::post('/onboard/dump', [OnboardController::class, 'dump'])->name('onboard.dump');
+    Route::post('/onboard/confirm', [OnboardController::class, 'confirm'])->name('onboard.confirm');
 
     // Magic inbox: parse → confirm chip in the UI → apply → undo.
     Route::post('/inbox/parse', [InboxController::class, 'parse'])->name('inbox.parse');

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { Check, Loader2, RotateCcw, Send, X } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { apiPost } from '@/lib/api';
@@ -115,10 +115,20 @@ function dismiss() {
 <template>
     <Head title="Home" />
 
-    <h1 class="text-2xl font-semibold">Catch up</h1>
-    <p class="mt-1 text-sm text-muted-foreground">
-        Everything that needs you, on one screen.
-    </p>
+    <div class="flex items-start justify-between">
+        <div>
+            <h1 class="text-2xl font-semibold">Catch up</h1>
+            <p class="mt-1 text-sm text-muted-foreground">
+                Everything that needs you, on one screen.
+            </p>
+        </div>
+        <Link
+            href="/onboard"
+            class="mt-1 shrink-0 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
+        >
+            Import
+        </Link>
+    </div>
 
     <form class="mt-4 flex gap-2" @submit.prevent="parse">
         <input

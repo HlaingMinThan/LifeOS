@@ -20,4 +20,19 @@ return [
         'model' => env('INBOX_MODEL', 'claude-sonnet-5'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Telegram
+    |--------------------------------------------------------------------------
+    |
+    | Bot token from @BotFather; chat_id is the owner's chat. When unset,
+    | notifications fall back to the log so local dev keeps working.
+    |
+    */
+
+    'telegram' => [
+        'token' => env('TELEGRAM_BOT_TOKEN'),
+        'chat_id' => env('TELEGRAM_CHAT_ID'),
+    ],
+
 ];

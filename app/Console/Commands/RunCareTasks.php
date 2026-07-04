@@ -1,0 +1,35 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Models\CareTask;
+use App\Services\Telegram\TelegramClient;
+use Illuminate\Console\Command;
+
+class RunCareTasks extends Command
+{
+    protected $signature = 'care:run';
+
+    protected $description = 'Fire due care tasks: notify, log, and reschedule';
+
+    public function handle(TelegramClient $telegram): int
+    {
+        $due = CareTask::where('active', true)
+            ->where('next_run_at', '<=', now())
+            ->get();
+
+        foreach ($due as $task) {
+            $telegram->send("💗 {$task->title}");
+
+            $task->logs()->create(['ran_at' => now(), 'status' => 'done']);
+
+            // daily/weekly land on a fixed slot; random picks a fresh
+            // offset each time — that keeps surprises unpredictable.
+            $task->update(['next_run_at' => $task->nextRunAfter(now())]);
+
+            $this->info("Fired: {$task->title} → next {$task->next_run_at}");
+        }
+
+        return self::SUCCESS;
+    }
+}
