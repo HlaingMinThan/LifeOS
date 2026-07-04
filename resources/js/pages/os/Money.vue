@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { Check, RotateCcw, Trash2 } from 'lucide-vue-next';
+import SwipeRow from '@/components/SwipeRow.vue';
 import { formatDate, formatMmk } from '@/lib/format';
 
 type Entry = {
@@ -43,12 +44,12 @@ const section = (direction: string) =>
                 {{ dir === 'payable' ? 'You owe' : 'Owed to you' }}
             </h2>
             <ul class="mt-2 space-y-2">
-                <li
-                    v-for="e in section(dir)"
-                    :key="e.id"
-                    class="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
-                    :class="{ 'opacity-50': e.status !== 'open' }"
-                >
+                <li v-for="e in section(dir)" :key="e.id">
+                    <SwipeRow @swipe-right="toggle(e)" @swipe-left="remove(e)">
+                    <div
+                        class="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
+                        :class="{ 'opacity-50': e.status !== 'open' }"
+                    >
                     <button
                         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
                         :class="
@@ -74,6 +75,8 @@ const section = (direction: string) =>
                     <button class="shrink-0 p-2 text-muted-foreground/60" @click="remove(e)">
                         <Trash2 class="h-4 w-4" />
                     </button>
+                    </div>
+                    </SwipeRow>
                 </li>
             </ul>
         </section>

@@ -30,6 +30,25 @@ class CareTask extends Model
         return $this->hasMany(CareTaskLog::class);
     }
 
+    /** First run for a newly created/edited schedule. */
+    public function initialNextRun(): CarbonInterface
+    {
+        $time = $this->time_of_day ?? '09:00:00';
+
+        return match ($this->schedule_type) {
+            'daily' => ($today = now()->setTimeFromTimeString($time))->isFuture()
+                ? $today
+                : $today->addDay(),
+            'weekly' => now()->dayOfWeek === ($this->weekday ?? 1)
+                    && now()->setTimeFromTimeString($time)->isFuture()
+                ? now()->setTimeFromTimeString($time)
+                : now()->next($this->weekday ?? 1)->setTimeFromTimeString($time),
+            'random' => now()
+                ->addDays(random_int($this->random_min_days ?? 7, $this->random_max_days ?? 20))
+                ->setTimeFromTimeString($time),
+        };
+    }
+
     /**
      * Compute the run after $from. Random schedules pick a fresh offset
      * every time — that is what keeps surprises unpredictable.

@@ -11,7 +11,7 @@ class Todo extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['title', 'bucket', 'status', 'due_date', 'done_at'];
+    protected $fillable = ['title', 'note', 'bucket', 'status', 'due_date', 'due_time', 'done_at'];
 
     protected function casts(): array
     {

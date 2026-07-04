@@ -17,10 +17,16 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/ledger/{entry}', [LedgerController::class, 'destroy'])->name('ledger.destroy');
 
     Route::get('/todos', [TodoController::class, 'index'])->name('todos');
+    Route::post('/todos', [TodoController::class, 'store'])->name('todos.store');
     Route::patch('/todos/{todo}/toggle', [TodoController::class, 'toggle'])->name('todos.toggle');
+    Route::patch('/todos/{todo}', [TodoController::class, 'update'])->name('todos.update');
     Route::delete('/todos/{todo}', [TodoController::class, 'destroy'])->name('todos.destroy');
 
     Route::get('/care', [CareController::class, 'index'])->name('care');
+    Route::post('/care', [CareController::class, 'store'])->name('care.store');
+    Route::patch('/care/{task}/toggle', [CareController::class, 'toggle'])->name('care.toggle');
+    Route::patch('/care/{task}', [CareController::class, 'update'])->name('care.update');
+    Route::delete('/care/{task}', [CareController::class, 'destroy'])->name('care.destroy');
 
     Route::get('/ideas', [IdeaController::class, 'index'])->name('ideas');
     Route::delete('/ideas/{idea}', [IdeaController::class, 'destroy'])->name('ideas.destroy');
