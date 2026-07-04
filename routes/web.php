@@ -13,7 +13,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/', [HomeController::class, 'index'])->name('home');
 
     Route::get('/money', [LedgerController::class, 'index'])->name('money');
+    Route::post('/ledger', [LedgerController::class, 'store'])->name('ledger.store');
     Route::patch('/ledger/{entry}/toggle', [LedgerController::class, 'toggle'])->name('ledger.toggle');
+    Route::patch('/ledger/{entry}', [LedgerController::class, 'update'])->name('ledger.update');
     Route::delete('/ledger/{entry}', [LedgerController::class, 'destroy'])->name('ledger.destroy');
 
     Route::get('/todos', [TodoController::class, 'index'])->name('todos');
