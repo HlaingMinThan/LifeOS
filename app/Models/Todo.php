@@ -16,7 +16,9 @@ class Todo extends Model
     protected function casts(): array
     {
         return [
-            'due_date' => 'date',
+            // Y-m-d keeps JSON free of a midnight timestamp that shifts a
+            // day when converted to UTC.
+            'due_date' => 'date:Y-m-d',
             'reminded_at' => 'datetime',
             'done_at' => 'datetime',
         ];

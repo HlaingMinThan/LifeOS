@@ -22,7 +22,9 @@ class LedgerEntry extends Model
         return [
             'amount_mmk' => 'integer',
             'amount_usd' => 'decimal:2',
-            'due_date' => 'date',
+            // Y-m-d keeps JSON free of a midnight timestamp that shifts a
+            // day when converted to UTC.
+            'due_date' => 'date:Y-m-d',
             'paid_at' => 'datetime',
         ];
     }
