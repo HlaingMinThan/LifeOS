@@ -23,8 +23,8 @@ class InboxBridge
 {
     private const ACTION_LABELS = [
         'mark_paid' => 'Marked paid',
-        'add_payable' => 'You owe',
-        'add_receivable' => 'Owed to you',
+        'add_payable' => 'Expense',
+        'add_receivable' => 'Income',
         'income_received' => 'Income received',
         'add_todo' => 'Todo added',
         'complete_todo' => 'Todo done',

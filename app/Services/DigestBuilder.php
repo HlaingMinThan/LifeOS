@@ -53,7 +53,7 @@ class DigestBuilder
         $payables = $relevantToday(LedgerEntry::open()->payable())->with('contact')->get();
         if ($payables->isNotEmpty()) {
             $lines[] = '';
-            $lines[] = '💸 You owe ('.number_format($payables->sum('amount_mmk')).' Ks):';
+            $lines[] = '💸 Expense ('.number_format($payables->sum('amount_mmk')).' Ks):';
             foreach ($payables as $entry) {
                 $lines[] = '  • '.($entry->contact?->name ?? $entry->title).' — '.number_format($entry->amount_mmk).' Ks';
             }
@@ -62,7 +62,7 @@ class DigestBuilder
         $receivables = $relevantToday(LedgerEntry::open()->receivable())->with('contact')->get();
         if ($receivables->isNotEmpty()) {
             $lines[] = '';
-            $lines[] = '💰 Owed to you ('.number_format($receivables->sum('amount_mmk')).' Ks):';
+            $lines[] = '💰 Income ('.number_format($receivables->sum('amount_mmk')).' Ks):';
             foreach ($receivables as $entry) {
                 $lines[] = '  • '.($entry->contact?->name ?? $entry->title).' — '.number_format($entry->amount_mmk).' Ks';
             }

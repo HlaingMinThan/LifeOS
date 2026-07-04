@@ -34,8 +34,8 @@ defineProps<{
 
 const ACTION_LABELS: Record<string, string> = {
     mark_paid: 'Mark paid',
-    add_payable: 'You owe',
-    add_receivable: 'Owed to you',
+    add_payable: 'Expense',
+    add_receivable: 'Income',
     income_received: 'Income received',
     add_todo: 'New todo',
     complete_todo: 'Complete todo',
@@ -247,9 +247,9 @@ function dismiss() {
 
     <div class="mt-6 space-y-4">
         <section class="rounded-xl border border-border bg-card p-4">
-            <h2 class="text-sm font-medium text-muted-foreground">You owe</h2>
+            <h2 class="text-sm font-medium text-muted-foreground">Expense</h2>
             <p v-if="!payables.length" class="mt-2 text-sm text-muted-foreground/70">
-                No open payables
+                No open expenses
             </p>
             <ul v-else class="mt-2 divide-y divide-border">
                 <li v-for="e in payables" :key="e.id" class="flex justify-between py-2 text-sm">
@@ -260,9 +260,9 @@ function dismiss() {
         </section>
 
         <section class="rounded-xl border border-border bg-card p-4">
-            <h2 class="text-sm font-medium text-muted-foreground">Owed to you</h2>
+            <h2 class="text-sm font-medium text-muted-foreground">Income</h2>
             <p v-if="!receivables.length" class="mt-2 text-sm text-muted-foreground/70">
-                No open receivables
+                No expected income
             </p>
             <ul v-else class="mt-2 divide-y divide-border">
                 <li v-for="e in receivables" :key="e.id" class="flex justify-between py-2 text-sm">

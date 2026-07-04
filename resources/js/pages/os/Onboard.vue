@@ -17,8 +17,8 @@ type Item = { raw_text: string; parsed: Parsed };
 
 const ACTION_LABELS: Record<string, string> = {
     mark_paid: 'Mark paid',
-    add_payable: 'You owe',
-    add_receivable: 'Owed to you',
+    add_payable: 'Expense',
+    add_receivable: 'Income',
     income_received: 'Income received',
     add_todo: 'Todo',
     complete_todo: 'Complete todo',

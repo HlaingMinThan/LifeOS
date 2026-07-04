@@ -107,7 +107,7 @@ const section = (direction: string) =>
                 "
                 @click="form.direction = 'payable'"
             >
-                I owe 💸
+                Expense 💸
             </button>
             <button
                 class="rounded-lg border py-2 text-sm"
@@ -118,7 +118,7 @@ const section = (direction: string) =>
                 "
                 @click="form.direction = 'receivable'"
             >
-                Owed to me 💰
+                Income 💰
             </button>
         </div>
         <input
@@ -177,7 +177,7 @@ const section = (direction: string) =>
     <template v-for="dir in ['payable', 'receivable']" :key="dir">
         <section v-if="section(dir).length" class="mt-6">
             <h2 class="text-sm font-medium text-muted-foreground">
-                {{ dir === 'payable' ? 'You owe' : 'Owed to you' }}
+                {{ dir === 'payable' ? 'Expense' : 'Income' }}
             </h2>
             <ul class="mt-2 space-y-2">
                 <li v-for="e in section(dir)" :key="e.id">
