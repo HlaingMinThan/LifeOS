@@ -54,6 +54,28 @@ class TelegramBridgeTest extends TestCase
         $this->assertSame(0, InboxEvent::count());
     }
 
+    public function test_care_command_lists_tasks_with_schedules(): void
+    {
+        \App\Models\CareTask::factory()->random(7, 20)->create(['title' => 'Send flowers']);
+        \App\Models\CareTask::factory()->create(['title' => 'Paused one', 'active' => false]);
+
+        $reply = app(InboxBridge::class)->handle($this->message('/care'));
+
+        $this->assertStringContainsString('Send flowers (every 7–20 days 🎲)', $reply);
+        $this->assertStringContainsString('Paused one', $reply);
+        $this->assertStringContainsString('paused', $reply);
+    }
+
+    public function test_idea_command_lists_parking_lot(): void
+    {
+        \App\Models\Idea::factory()->create(['title' => 'mushroom idea']);
+
+        $reply = app(InboxBridge::class)->handle($this->message('/idea'));
+
+        $this->assertStringContainsString('💡 Ideas:', $reply);
+        $this->assertStringContainsString('mushroom idea', $reply);
+    }
+
     public function test_messages_from_other_chats_are_ignored(): void
     {
         $reply = app(InboxBridge::class)->handle($this->message('mushroom idea မှတ်ထား', '99999'));

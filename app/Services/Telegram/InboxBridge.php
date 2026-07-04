@@ -2,6 +2,8 @@
 
 namespace App\Services\Telegram;
 
+use App\Models\CareTask;
+use App\Models\Idea;
 use App\Models\InboxEvent;
 use App\Services\DigestBuilder;
 use App\Services\Inbox\BrainDumpParser;
@@ -51,11 +53,13 @@ class InboxBridge
         }
 
         return match ($text) {
-            '/start' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\n/today — digest · /tomorrow · /yesterday · /todobydate · /undo",
+            '/start' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\n/today · /tomorrow · /yesterday · /todobydate · /care · /idea · /undo",
             '/today' => $this->digest->build(),
             '/tomorrow', '/tmr' => $this->digest->forDate(today()->addDay()),
             '/yesterday' => $this->digest->forDate(today()->subDay()),
             '/todobydate' => $this->askForDate(),
+            '/care' => $this->listCareTasks(),
+            '/idea', '/ideas' => $this->listIdeas(),
             '/undo' => $this->undoLatest(),
             default => $this->freeText($text),
         };
@@ -168,6 +172,49 @@ class InboxBridge
     private function fmtTime(string $time): string
     {
         return strtolower(date('g:ia', strtotime($time)));
+    }
+
+    private function listCareTasks(): string
+    {
+        $tasks = CareTask::orderByDesc('active')->orderBy('next_run_at')->get();
+
+        if ($tasks->isEmpty()) {
+            return 'No care tasks yet — add one on the Care screen.';
+        }
+
+        $lines = ['💗 Care tasks:'];
+        foreach ($tasks as $task) {
+            $schedule = match ($task->schedule_type) {
+                'daily' => 'daily'.($task->time_of_day ? ' '.$this->fmtTime($task->time_of_day) : ''),
+                'weekly' => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][$task->weekday ?? 1]
+                    .($task->time_of_day ? ' '.$this->fmtTime($task->time_of_day) : ''),
+                'random' => "every {$task->random_min_days}–{$task->random_max_days} days 🎲",
+                default => $task->schedule_type,
+            };
+            $next = $task->active && $task->next_run_at
+                ? ' · next '.$task->next_run_at->format('D j M')
+                : ($task->active ? '' : ' · paused');
+            $lines[] = "  • {$task->title} ({$schedule}){$next}";
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function listIdeas(): string
+    {
+        $ideas = Idea::latest()->get();
+
+        if ($ideas->isEmpty()) {
+            return 'The parking lot is empty — "mushroom idea မှတ်ထား" to park one.';
+        }
+
+        $lines = ['💡 Ideas:'];
+        foreach ($ideas as $idea) {
+            $status = $idea->status === 'parked' ? '' : " ({$idea->status})";
+            $lines[] = "  • {$idea->title}{$status}";
+        }
+
+        return implode("\n", $lines);
     }
 
     private function undoLatest(): string
