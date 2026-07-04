@@ -57,6 +57,68 @@ class ClaudeParser implements ParserContract
         ];
     }
 
+    /**
+     * Batch mode: parse a whole pasted list in one call, so header lines
+     * ("မနက်ဖြန်", "for the shop") give context to the lines below them.
+     * Returns [['raw_text' => ..., 'parsed' => [...]], ...].
+     */
+    public function parseMany(string $text): array
+    {
+        $batchInstructions = <<<'INSTRUCTIONS'
+
+BATCH MODE for this request: the user pasted several lines at once.
+Respond with ONLY a minified JSON array — one object per actionable item,
+using the same schema plus a "raw" field holding the source line.
+Header/context lines (a date like မနက်ဖြန်, a person, a place that applies
+to the lines below) are NOT items themselves — fold their meaning into the
+items they cover (e.g. set that date as "due" on each). Times of day stay
+in the target text.
+INSTRUCTIONS;
+
+        $response = Http::withHeaders([
+            'x-api-key' => config('lifeos.anthropic.key'),
+            'anthropic-version' => '2023-06-01',
+        ])->timeout(60)->retry(2, 300)->post('https://api.anthropic.com/v1/messages', [
+            'model' => config('lifeos.anthropic.model'),
+            'max_tokens' => 4000,
+            'thinking' => ['type' => 'disabled'],
+            'system' => $this->systemPrompt().$batchInstructions,
+            'messages' => [['role' => 'user', 'content' => $text]],
+        ]);
+
+        if ($response->failed()) {
+            throw new RuntimeException(
+                $response->json('error.message') ?? 'Claude API request failed.'
+            );
+        }
+
+        $responseText = collect($response->json('content', []))
+            ->firstWhere('type', 'text')['text'] ?? '';
+
+        $items = json_decode($responseText, true);
+
+        if (! is_array($items) || array_is_list($items) === false) {
+            throw new RuntimeException('Batch parser returned invalid JSON.');
+        }
+
+        return collect($items)
+            ->filter(fn ($item) => is_array($item) && isset($item['action'])
+                && trim($item['target'] ?? '') !== '') // header leftovers have no target
+            ->map(fn ($item) => [
+                'raw_text' => $item['raw'] ?? ($item['target'] ?? ''),
+                'parsed' => [
+                    'action' => $item['action'],
+                    'target' => $item['target'] ?? null,
+                    'amount_mmk' => $item['amount_mmk'] ?? null,
+                    'due' => $item['due'] ?? null,
+                    'bucket' => $item['bucket'] ?? null,
+                    'confidence' => (float) ($item['confidence'] ?? 0),
+                ],
+            ])
+            ->values()
+            ->all();
+    }
+
     private function systemPrompt(): string
     {
         $contacts = Contact::all()->map->promptLabel()->implode(', ') ?: '(none yet)';
