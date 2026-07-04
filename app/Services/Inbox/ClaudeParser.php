@@ -90,10 +90,10 @@ most recently mentioned date in the message. Resolve it — never leave
 "due" empty when a reference points to a known date.
 
 BATCH EXAMPLE (assume today is {$today}, tomorrow is {$tomorrow}):
-"ဒီနေ့ shop က 100k ဝင်မယ် ပီးတော့ ko ko ဆီက မနက်ဖြန် 50k ဝင်မယ်
+"ဒီနေ့ shop က 100k ဝင်ပြီ ပီးတော့ ko ko ဆီက မနက်ဖြန် 50k ဝင်မယ်
 အဲ့နေ့ chit ကို 30k ပေးရမယ်
 မနက် ၁၀ နာရီ ဈေးသွားရန်"
-→ [{"raw":"ဒီနေ့ shop က 100k ဝင်မယ်","action":"income_received","target":"shop","amount_mmk":100000,"due":"{$today}","confidence":0.9},
+→ [{"raw":"ဒီနေ့ shop က 100k ဝင်ပြီ","action":"income_received","target":"shop","amount_mmk":100000,"due":"{$today}","confidence":0.9},
 {"raw":"ko ko ဆီက မနက်ဖြန် 50k ဝင်မယ်","action":"add_receivable","target":"Ko Ko","amount_mmk":50000,"due":"{$tomorrow}","confidence":0.9},
 {"raw":"အဲ့နေ့ chit ကို 30k ပေးရမယ်","action":"add_payable","target":"Chit","amount_mmk":30000,"due":"{$tomorrow}","confidence":0.85},
 {"raw":"မနက် ၁၀ နာရီ ဈေးသွားရန်","action":"add_todo","target":"မနက် ၁၀ နာရီ ဈေးသွားရန်","amount_mmk":null,"due":null,"due_time":"10:00","bucket":"personal","confidence":0.85}]
@@ -181,6 +181,13 @@ Open todos: {$todos}
 
 Match targets against the known lists above (fuzzy, either script).
 If nothing matches, treat as a new record.
+
+Tense decides the action for money:
+- Future/expected ("ဝင်မယ်", "ရမယ်", "will come in", "expecting") →
+  add_receivable (money coming) or add_payable ("ပေးရမယ်", to pay).
+- Already happened ("ဝင်ပြီ", "ရပြီ", "received") → income_received.
+  ("ပေးပြီးပြီ", "paid") → mark_paid.
+Never mark expected money as received.
 
 Target rules:
 - Matching an existing record (mark_paid, complete_todo, income_received):
