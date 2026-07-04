@@ -92,4 +92,43 @@ class TelegramBridgeTest extends TestCase
         $this->assertStringContainsString('laundry တင်ရန်', $reply);
         $this->assertStringNotContainsString('not tomorrow', $reply);
     }
+
+    public function test_yesterday_shows_done_and_open_marks(): void
+    {
+        Todo::factory()->done()->create(['title' => 'finished thing', 'due_date' => today()->subDay()]);
+        Todo::factory()->create(['title' => 'missed thing', 'due_date' => today()->subDay()]);
+
+        $reply = app(InboxBridge::class)->handle($this->message('/yesterday'));
+
+        $this->assertStringContainsString('✅ finished thing', $reply);
+        $this->assertStringContainsString('⭕ missed thing', $reply);
+    }
+
+    public function test_todobydate_asks_then_answers(): void
+    {
+        Todo::factory()->create(['title' => 'monday plan', 'due_date' => '2026-07-06']);
+        $bridge = app(InboxBridge::class);
+
+        $ask = $bridge->handle($this->message('/todobydate'));
+        $this->assertStringContainsString('Which date?', $ask);
+
+        $reply = $bridge->handle($this->message('July 6'));
+        $this->assertStringContainsString('Mon, 6 Jul 2026', $reply);
+        $this->assertStringContainsString('monday plan', $reply);
+
+        // The date answer must not have been treated as an inbox command.
+        $this->assertSame(0, InboxEvent::count());
+    }
+
+    public function test_todobydate_reprompts_on_bad_date(): void
+    {
+        $bridge = app(InboxBridge::class);
+        $bridge->handle($this->message('/todobydate'));
+
+        $retry = $bridge->handle($this->message('blah blah blah'));
+        $this->assertStringContainsString("Couldn't read that date", $retry);
+
+        $reply = $bridge->handle($this->message('6.7'));
+        $this->assertStringContainsString('6 Jul 2026', $reply);
+    }
 }

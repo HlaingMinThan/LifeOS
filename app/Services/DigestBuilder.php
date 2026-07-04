@@ -70,10 +70,9 @@ class DigestBuilder
         return implode("\n", $lines);
     }
 
-    /** Preview of tomorrow: due todos + care tasks landing that day. */
-    public function tomorrow(): string
+    /** Any single day: its todos (open ⭕ / done ✅) + care tasks landing then. */
+    public function forDate(\Carbon\CarbonInterface $date): string
     {
-        $date = today()->addDay();
         $lines = ['🗓 '.$date->format('D, j M Y')];
 
         $care = CareTask::where('active', true)
@@ -86,18 +85,19 @@ class DigestBuilder
             }
         }
 
-        $todos = Todo::open()->whereDate('due_date', $date)->get();
+        $todos = Todo::whereDate('due_date', $date)->get();
         if ($todos->isNotEmpty()) {
             $lines[] = '';
-            $lines[] = '📌 Due tomorrow:';
+            $lines[] = '📌 Todos:';
             foreach ($todos as $todo) {
-                $lines[] = "  • {$todo->title}";
+                $mark = $todo->status === 'done' ? '✅' : '⭕';
+                $lines[] = "  {$mark} {$todo->title}";
             }
         }
 
         if (count($lines) === 1) {
             $lines[] = '';
-            $lines[] = 'Nothing scheduled for tomorrow 🌙';
+            $lines[] = 'Nothing on this day 🌙';
         }
 
         return implode("\n", $lines);

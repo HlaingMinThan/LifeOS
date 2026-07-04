@@ -64,15 +64,26 @@ class ClaudeParser implements ParserContract
      */
     public function parseMany(string $text): array
     {
-        $batchInstructions = <<<'INSTRUCTIONS'
+        $tomorrow = now()->addDay()->toDateString();
+
+        $batchInstructions = <<<INSTRUCTIONS
 
 BATCH MODE for this request: the user pasted several lines at once.
 Respond with ONLY a minified JSON array — one object per actionable item,
 using the same schema plus a "raw" field holding the source line.
-Header/context lines (a date like မနက်ဖြန်, a person, a place that applies
-to the lines below) are NOT items themselves — fold their meaning into the
-items they cover (e.g. set that date as "due" on each). Times of day stay
-in the target text.
+
+CRITICAL — header lines: when a line is only a date or context ("July 6
+2026 Monday", "မနက်ဖြန်", a person, a place), it is NOT an item. It MUST
+NOT appear in the array. Instead its meaning applies to EVERY line below
+it (until the next header): a date header sets "due" on all of them.
+Times of day stay inside the target text; only the date goes in "due".
+
+BATCH EXAMPLE (assume tomorrow is {$tomorrow}):
+"မနက်ဖြန်
+မနက် ၁၀ နာရီ ဈေးသွားရန်
+၁၁ နာရီ လျှော်ဖွပ်ရန်"
+→ [{"raw":"မနက် ၁၀ နာရီ ဈေးသွားရန်","action":"add_todo","target":"မနက် ၁၀ နာရီ ဈေးသွားရန်","amount_mmk":null,"due":"{$tomorrow}","bucket":"personal","confidence":0.85},
+{"raw":"၁၁ နာရီ လျှော်ဖွပ်ရန်","action":"add_todo","target":"၁၁ နာရီ လျှော်ဖွပ်ရန်","amount_mmk":null,"due":"{$tomorrow}","bucket":"personal","confidence":0.85}]
 INSTRUCTIONS;
 
         $response = Http::withHeaders([

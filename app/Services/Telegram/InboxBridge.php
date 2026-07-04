@@ -7,6 +7,8 @@ use App\Services\DigestBuilder;
 use App\Services\Inbox\BrainDumpParser;
 use App\Services\Inbox\InboxApplier;
 use App\Services\Inbox\ParserContract;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -49,15 +51,60 @@ class InboxBridge
         }
 
         return match ($text) {
-            '/start' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\n/today — digest · /tomorrow — preview · /undo — revert last",
+            '/start' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\n/today — digest · /tomorrow · /yesterday · /todobydate · /undo",
             '/today' => $this->digest->build(),
-            '/tomorrow' => $this->digest->tomorrow(),
+            '/tomorrow', '/tmr' => $this->digest->forDate(today()->addDay()),
+            '/yesterday' => $this->digest->forDate(today()->subDay()),
+            '/todobydate' => $this->askForDate(),
             '/undo' => $this->undoLatest(),
-            // A multi-line message is a mini brain dump: one action per line.
-            default => str_contains($text, "\n")
-                ? $this->applyMany($text)
-                : $this->applyText($text),
+            default => $this->freeText($text),
         };
+    }
+
+    private function freeText(string $text): string
+    {
+        // /todobydate asked a question; this message is the answer.
+        if (Cache::pull('telegram:awaiting_date')) {
+            if ($date = $this->resolveDate($text)) {
+                return $this->digest->forDate($date);
+            }
+
+            Cache::put('telegram:awaiting_date', true, now()->addMinutes(5));
+
+            return "🤔 Couldn't read that date — try like \"July 6\", \"2026-07-06\", or \"6.7\".";
+        }
+
+        // A multi-line message is a mini brain dump: one action per line.
+        return str_contains($text, "\n")
+            ? $this->applyMany($text)
+            : $this->applyText($text);
+    }
+
+    private function askForDate(): string
+    {
+        Cache::put('telegram:awaiting_date', true, now()->addMinutes(5));
+
+        return '📅 Which date? (e.g. "July 6", "2026-07-06", "6.7")';
+    }
+
+    private function resolveDate(string $text): ?CarbonInterface
+    {
+        // Burmese digits → Arabic so "၆.၇" works too.
+        $text = strtr(trim($text), array_combine(
+            ['၀', '၁', '၂', '၃', '၄', '၅', '၆', '၇', '၈', '၉'],
+            ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
+        ));
+
+        // "6.7" / "6/7" → day.month of the current year.
+        if (preg_match('/^(\d{1,2})[.\/](\d{1,2})$/', $text, $m)) {
+            $text = now()->year."-{$m[2]}-{$m[1]}";
+        }
+
+        try {
+            return \Illuminate\Support\Facades\Date::parse($text);
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     private function applyMany(string $text): string
