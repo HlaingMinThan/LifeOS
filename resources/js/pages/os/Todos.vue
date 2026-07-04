@@ -3,7 +3,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { Check, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { reactive, ref } from 'vue';
 import SwipeRow from '@/components/SwipeRow.vue';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatTime } from '@/lib/format';
 
 type Todo = {
     id: number;
@@ -241,7 +241,7 @@ const inBucket = (bucket: string) => props.todos.filter((t) => t.bucket === buck
                                 </p>
                                 <p v-if="t.due_date || t.due_time" class="text-xs text-muted-foreground">
                                     <template v-if="t.due_date">{{ formatDate(t.due_date) }}</template>
-                                    <template v-if="t.due_time"> · {{ t.due_time.slice(0, 5) }}</template>
+                                    <template v-if="t.due_time"> · {{ formatTime(t.due_time) }}</template>
                                 </p>
                             </div>
                             <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(t)">

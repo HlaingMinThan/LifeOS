@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { Heart, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-vue-next';
 import { reactive, ref } from 'vue';
+import { formatTime } from '@/lib/format';
 
 type CareTask = {
     id: number;
@@ -87,7 +88,7 @@ function nextRun(t: CareTask): string {
 }
 
 function scheduleSummary(t: CareTask): string {
-    const time = t.time_of_day ? ` ${t.time_of_day.slice(0, 5)}` : '';
+    const time = t.time_of_day ? ` ${formatTime(t.time_of_day)}` : '';
     if (t.schedule_type === 'daily') return `Daily${time}`;
     if (t.schedule_type === 'weekly') return `${WEEKDAYS[t.weekday ?? 1]}${time}`;
     return `Every ${t.random_min_days}–${t.random_max_days} days 🎲`;

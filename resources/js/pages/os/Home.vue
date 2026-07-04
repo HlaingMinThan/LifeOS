@@ -3,7 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Check, Loader2, RotateCcw, Send, X } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { apiPost } from '@/lib/api';
-import { formatDate, formatMmk } from '@/lib/format';
+import { formatDate, formatMmk, formatTime } from '@/lib/format';
 
 type LedgerEntry = {
     id: number;
@@ -200,7 +200,7 @@ function dismiss() {
                 <p v-if="parsed.due || parsed.due_time" class="text-xs text-muted-foreground">
                     Due
                     <template v-if="parsed.due">{{ formatDate(parsed.due) }}</template>
-                    <template v-if="parsed.due_time"> ⏰ {{ parsed.due_time }}</template>
+                    <template v-if="parsed.due_time"> ⏰ {{ formatTime(parsed.due_time) }}</template>
                 </p>
             </div>
             <div class="flex shrink-0 flex-col gap-2">

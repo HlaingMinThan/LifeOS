@@ -11,3 +11,12 @@ export function formatDate(date: string | null | undefined): string {
         month: 'short',
     });
 }
+
+/** "22:43" or "22:43:00" → "10:43pm" */
+export function formatTime(time: string | null | undefined): string {
+    if (!time) return '';
+    const [h, m] = time.split(':').map(Number);
+    const suffix = h >= 12 ? 'pm' : 'am';
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(m).padStart(2, '0')}${suffix}`;
+}

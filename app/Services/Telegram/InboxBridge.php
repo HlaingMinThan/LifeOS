@@ -124,7 +124,7 @@ class InboxBridge
                 $this->applier->apply($parsed, $item['raw_text']);
                 $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
                 $amount = $parsed['amount_mmk'] ? ' · '.number_format($parsed['amount_mmk']).' Ks' : '';
-                $time = ($parsed['due_time'] ?? null) ? " ⏰ {$parsed['due_time']}" : '';
+                $time = ($parsed['due_time'] ?? null) ? ' ⏰ '.$this->fmtTime($parsed['due_time']) : '';
                 $lines[] = "✅ {$label}: {$parsed['target']}{$amount}{$time}";
             } catch (ValidationException $e) {
                 $lines[] = "⚠️ {$item['raw_text']}: ".collect($e->errors())->flatten()->first();
@@ -159,9 +159,15 @@ class InboxBridge
 
         $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
         $amount = $parsed['amount_mmk'] ? ' · '.number_format($parsed['amount_mmk']).' Ks' : '';
-        $time = ($parsed['due_time'] ?? null) ? " ⏰ {$parsed['due_time']}" : '';
+        $time = ($parsed['due_time'] ?? null) ? ' ⏰ '.$this->fmtTime($parsed['due_time']) : '';
 
         return "✅ {$label}: {$parsed['target']}{$amount}{$time}\nWrong? /undo";
+    }
+
+    /** "22:43" → "10:43pm" */
+    private function fmtTime(string $time): string
+    {
+        return strtolower(date('g:ia', strtotime($time)));
     }
 
     private function undoLatest(): string
