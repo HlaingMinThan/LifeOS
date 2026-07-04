@@ -55,6 +55,25 @@ class TodoReminderTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_explicitly_past_time_is_rejected_with_clear_error(): void
+    {
+        $user = \App\Models\User::factory()->create();
+
+        $response = $this->actingAs($user)->postJson('/inbox/apply', [
+            'raw_text' => 'today 9am take medicine',
+            'parsed' => [
+                'action' => 'add_todo',
+                'target' => 'take medicine',
+                'due' => today()->toDateString(),
+                'due_time' => now()->subHour()->format('H:i'),
+            ],
+        ]);
+
+        $response->assertUnprocessable();
+        $this->assertStringContainsString('already passed', $response->json('message'));
+        $this->assertSame(0, Todo::count());
+    }
+
     public function test_rescheduling_rearms_the_reminder(): void
     {
         $user = \App\Models\User::factory()->create();

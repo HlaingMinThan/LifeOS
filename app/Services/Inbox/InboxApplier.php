@@ -131,12 +131,24 @@ class InboxApplier
     private function addTodo(array $parsed): Todo
     {
         $dueTime = $parsed['due_time'] ?? null;
+        // A time without a date means today — reminders need a date.
+        $dueDate = $parsed['due'] ?? ($dueTime ? today()->toDateString() : null);
+
+        // A reminder for a moment that already passed can only misfire.
+        // (A past *date* alone stays allowed — tracking overdue is a feature.)
+        if ($dueTime && $dueDate) {
+            $dueAt = now()->parse($dueDate)->setTimeFromTimeString($dueTime);
+            if ($dueAt->isPast()) {
+                throw ValidationException::withMessages([
+                    'text' => "That time ({$dueAt->format('D j M H:i')}) has already passed — give me a future time.",
+                ]);
+            }
+        }
 
         return Todo::create([
             'title' => $parsed['target'] ?? 'Untitled',
             'bucket' => $parsed['bucket'] ?? 'personal',
-            // A time without a date means today — reminders need a date.
-            'due_date' => $parsed['due'] ?? ($dueTime ? today() : null),
+            'due_date' => $dueDate,
             'due_time' => $dueTime,
         ]);
     }
