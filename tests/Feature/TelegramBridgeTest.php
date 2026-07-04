@@ -54,6 +54,17 @@ class TelegramBridgeTest extends TestCase
         $this->assertSame(0, InboxEvent::count());
     }
 
+    public function test_money_reply_always_shows_a_date_for_confirmation(): void
+    {
+        $bridge = app(InboxBridge::class);
+
+        // Fake parser sets no due date → the reply must say so explicitly.
+        $reply = $bridge->handle($this->message('arkar ဆီက 1 သိန်း ရစရာရှိတယ်'));
+
+        $this->assertStringContainsString('✅ Income', $reply);
+        $this->assertStringContainsString('📅 no date', $reply);
+    }
+
     public function test_care_command_lists_tasks_with_schedules(): void
     {
         \App\Models\CareTask::factory()->random(7, 20)->create(['title' => 'Send flowers']);
