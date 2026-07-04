@@ -22,9 +22,12 @@ class ClaudeParser implements ParserContract
         $response = Http::withHeaders([
             'x-api-key' => config('lifeos.anthropic.key'),
             'anthropic-version' => '2023-06-01',
-        ])->timeout(30)->post('https://api.anthropic.com/v1/messages', [
+        ])->timeout(20)->retry(2, 300)->post('https://api.anthropic.com/v1/messages', [
             'model' => config('lifeos.anthropic.model'),
             'max_tokens' => 300,
+            // Sonnet 5 defaults to adaptive thinking; a one-line parse doesn't
+            // need it and it triples latency + cost.
+            'thinking' => ['type' => 'disabled'],
             'system' => $this->systemPrompt(),
             'messages' => [['role' => 'user', 'content' => $text]],
         ]);
@@ -35,7 +38,10 @@ class ClaudeParser implements ParserContract
             );
         }
 
-        $parsed = json_decode($response->json('content.0.text', ''), true);
+        $responseText = collect($response->json('content', []))
+            ->firstWhere('type', 'text')['text'] ?? '';
+
+        $parsed = json_decode($responseText, true);
 
         if (! is_array($parsed) || ! isset($parsed['action'])) {
             throw new RuntimeException('Parser returned invalid JSON.');

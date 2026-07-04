@@ -94,6 +94,9 @@ function callClaude(string $apiKey, string $model, string $system, string $user)
     $payload = json_encode([
         'model' => $model,
         'max_tokens' => 300,
+        // Sonnet 5 defaults to adaptive thinking; a one-line parse doesn't
+        // need it and it triples latency + cost.
+        'thinking' => ['type' => 'disabled'],
         'system' => $system,
         'messages' => [['role' => 'user', 'content' => $user]],
     ]);
@@ -120,7 +123,15 @@ function callClaude(string $apiKey, string $model, string $system, string $user)
     if (isset($body['error'])) {
         return ['error' => $body['error']['message'], 'ms' => $ms];
     }
-    return ['text' => $body['content'][0]['text'] ?? '', 'ms' => $ms,
+    $text = '';
+    foreach ($body['content'] ?? [] as $block) {
+        if (($block['type'] ?? '') === 'text') {
+            $text = $block['text'];
+            break;
+        }
+    }
+
+    return ['text' => $text, 'ms' => $ms,
             'in' => $body['usage']['input_tokens'] ?? 0, 'out' => $body['usage']['output_tokens'] ?? 0];
 }
 
