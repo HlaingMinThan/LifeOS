@@ -4,6 +4,7 @@ namespace App\Services\Telegram;
 
 use App\Models\InboxEvent;
 use App\Services\DigestBuilder;
+use App\Services\Inbox\BrainDumpParser;
 use App\Services\Inbox\InboxApplier;
 use App\Services\Inbox\ParserContract;
 use Illuminate\Validation\ValidationException;
@@ -29,6 +30,7 @@ class InboxBridge
 
     public function __construct(
         private ParserContract $parser,
+        private BrainDumpParser $dumpParser,
         private InboxApplier $applier,
         private DigestBuilder $digest,
     ) {}
@@ -50,15 +52,49 @@ class InboxBridge
             '/start' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\n/today — digest · /undo — revert last",
             '/today' => $this->digest->build(),
             '/undo' => $this->undoLatest(),
-            default => $this->applyText($text),
+            // A multi-line message is a mini brain dump: one action per line.
+            default => str_contains($text, "\n")
+                ? $this->applyMany($text)
+                : $this->applyText($text),
         };
+    }
+
+    private function applyMany(string $text): string
+    {
+        $lines = [];
+
+        foreach ($this->dumpParser->parse($text) as $item) {
+            $parsed = $item['parsed'];
+
+            if ($parsed['action'] === 'unknown' || $parsed['confidence'] < 0.7) {
+                $lines[] = "🤔 skipped: {$item['raw_text']}";
+
+                continue;
+            }
+
+            try {
+                $this->applier->apply($parsed, $item['raw_text']);
+                $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
+                $amount = $parsed['amount_mmk'] ? ' · '.number_format($parsed['amount_mmk']).' Ks' : '';
+                $lines[] = "✅ {$label}: {$parsed['target']}{$amount}";
+            } catch (ValidationException $e) {
+                $lines[] = "⚠️ {$item['raw_text']}: ".collect($e->errors())->flatten()->first();
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = 'Wrong? /undo reverts one at a time.';
+
+        return implode("\n", $lines);
     }
 
     private function applyText(string $text): string
     {
         try {
             $parsed = $this->parser->parse($text);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            report($e);
+
             return '⚠️ Parser unavailable — try again in a moment.';
         }
 

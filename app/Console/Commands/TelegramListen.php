@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Services\Telegram\InboxBridge;
 use App\Services\Telegram\TelegramClient;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 class TelegramListen extends Command
@@ -22,7 +23,8 @@ class TelegramListen extends Command
         }
 
         $this->info('Listening for Telegram messages… (Ctrl+C to stop)');
-        $offset = 0;
+        // Persisted so a restart never replays messages already handled.
+        $offset = Cache::get('telegram:offset', 0);
 
         do {
             try {
@@ -36,6 +38,7 @@ class TelegramListen extends Command
 
             foreach ($updates as $update) {
                 $offset = $update['update_id'] + 1;
+                Cache::put('telegram:offset', $offset, now()->addYear());
 
                 if (! isset($update['message'])) {
                     continue;

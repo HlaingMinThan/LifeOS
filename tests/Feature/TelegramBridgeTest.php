@@ -62,6 +62,19 @@ class TelegramBridgeTest extends TestCase
         $this->assertSame(0, InboxEvent::count());
     }
 
+    public function test_multiline_message_applies_each_line(): void
+    {
+        $reply = app(InboxBridge::class)->handle($this->message(
+            "mushroom idea မှတ်ထား\nbuy dog food tomorrow\nhi",
+        ));
+
+        $this->assertStringContainsString('✅ Idea parked', $reply);
+        $this->assertStringContainsString('✅ Todo added', $reply);
+        $this->assertStringContainsString('🤔 skipped: hi', $reply);
+        $this->assertSame(2, InboxEvent::where('applied', true)->count());
+        $this->assertSame(1, Todo::count());
+    }
+
     public function test_today_returns_digest(): void
     {
         $reply = app(InboxBridge::class)->handle($this->message('/today'));
