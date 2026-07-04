@@ -111,6 +111,38 @@ class InboxFlowTest extends TestCase
         ])->assertUnprocessable();
     }
 
+    public function test_corrected_parse_is_saved_as_parser_example(): void
+    {
+        $raw = 'Cargo pro money ထဲက 7 သိန်း Dolla ဝယ်ရန်';
+
+        $this->actingAs($this->user)->postJson('/inbox/apply', [
+            'raw_text' => $raw,
+            'parsed' => [
+                'action' => 'add_todo',
+                'target' => 'Buy dollars with 7 သိန်း from Cargo Pro money',
+                'bucket' => 'money_task',
+                'confidence' => 0.4,
+            ],
+            'corrected' => true,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('parser_examples', ['raw_text' => $raw]);
+        $example = \App\Models\ParserExample::first();
+        $this->assertSame('add_todo', $example->corrected_json['action']);
+        $this->assertArrayNotHasKey('confidence', $example->corrected_json);
+        $this->assertSame('money_task', \App\Models\Todo::first()->bucket);
+    }
+
+    public function test_uncorrected_apply_saves_no_example(): void
+    {
+        $this->actingAs($this->user)->postJson('/inbox/apply', [
+            'raw_text' => 'mushroom idea မှတ်ထား',
+            'parsed' => ['action' => 'add_idea', 'target' => 'Mushroom selling'],
+        ])->assertOk();
+
+        $this->assertSame(0, \App\Models\ParserExample::count());
+    }
+
     public function test_undo_twice_fails(): void
     {
         $eventId = $this->actingAs($this->user)->postJson('/inbox/apply', [

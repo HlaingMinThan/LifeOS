@@ -43,9 +43,15 @@ const ACTION_LABELS: Record<string, string> = {
     unknown: 'Not sure…',
 };
 
+// Actions the user can pick when correcting a parse (everything but unknown).
+const ACTION_OPTIONS = Object.entries(ACTION_LABELS).filter(([k]) => k !== 'unknown');
+const BUCKET_ACTIONS = ['add_todo', 'complete_todo'];
+const AMOUNT_ACTIONS = ['mark_paid', 'add_payable', 'add_receivable', 'income_received'];
+
 const text = ref('');
 const state = ref<'idle' | 'parsing' | 'confirm' | 'applying' | 'applied'>('idle');
 const parsed = ref<Parsed | null>(null);
+const originalParsed = ref('');
 const rawText = ref('');
 const lastEventId = ref<number | null>(null);
 const error = ref('');
@@ -59,6 +65,7 @@ async function parse() {
             text: text.value,
         });
         parsed.value = res.parsed;
+        originalParsed.value = JSON.stringify(res.parsed);
         rawText.value = res.raw_text;
         state.value = 'confirm';
     } catch (e) {
@@ -74,6 +81,8 @@ async function apply() {
         const res = await apiPost<{ event_id: number }>('/inbox/apply', {
             raw_text: rawText.value,
             parsed: parsed.value,
+            // A changed parse is a correction — the parser learns from it.
+            corrected: JSON.stringify(parsed.value) !== originalParsed.value,
         });
         lastEventId.value = res.event_id;
         state.value = 'applied';
@@ -131,30 +140,60 @@ function dismiss() {
 
     <p v-if="error" class="mt-2 text-sm text-red-500">{{ error }}</p>
 
-    <!-- Confirm chip: nothing is written until this is accepted -->
+    <!-- Confirm chip: editable — nothing is written until this is accepted -->
     <div
-        v-if="state === 'confirm' || state === 'applying'"
+        v-if="(state === 'confirm' || state === 'applying') && parsed"
         class="mt-3 rounded-xl border border-primary/40 bg-primary/5 p-4"
     >
-        <div class="flex items-center justify-between gap-2">
-            <div class="min-w-0">
-                <span class="text-xs font-medium uppercase tracking-wide text-primary">
-                    {{ ACTION_LABELS[parsed?.action ?? 'unknown'] }}
-                </span>
-                <p class="mt-1 truncate font-medium">
-                    {{ parsed?.target ?? '—' }}
-                    <span v-if="parsed?.amount_mmk" class="text-muted-foreground">
-                        · {{ formatMmk(parsed.amount_mmk) }}
-                    </span>
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1 space-y-2">
+                <select
+                    v-model="parsed.action"
+                    class="w-full rounded-lg border border-input bg-card px-2 py-1.5 text-sm font-medium text-primary outline-none focus:ring-2 focus:ring-ring"
+                >
+                    <option v-if="parsed.action === 'unknown'" value="unknown" disabled>
+                        Not sure — pick an action…
+                    </option>
+                    <option v-for="[value, label] in ACTION_OPTIONS" :key="value" :value="value">
+                        {{ label }}
+                    </option>
+                </select>
+                <input
+                    v-model="parsed.target"
+                    type="text"
+                    placeholder="Title / who"
+                    class="w-full rounded-lg border border-input bg-card px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <div class="flex gap-2">
+                    <input
+                        v-if="AMOUNT_ACTIONS.includes(parsed.action)"
+                        v-model.number="parsed.amount_mmk"
+                        type="number"
+                        placeholder="Amount (Ks)"
+                        class="w-full rounded-lg border border-input bg-card px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <select
+                        v-if="BUCKET_ACTIONS.includes(parsed.action)"
+                        v-model="parsed.bucket"
+                        class="w-full rounded-lg border border-input bg-card px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                        <option :value="null">Bucket…</option>
+                        <option value="work">Work</option>
+                        <option value="personal">Personal</option>
+                        <option value="money_task">Money</option>
+                    </select>
+                </div>
+                <p v-if="parsed.amount_mmk && AMOUNT_ACTIONS.includes(parsed.action)" class="text-xs text-muted-foreground">
+                    = {{ formatMmk(parsed.amount_mmk) }}
                 </p>
-                <p v-if="parsed?.due" class="text-xs text-muted-foreground">
+                <p v-if="parsed.due" class="text-xs text-muted-foreground">
                     Due {{ formatDate(parsed.due) }}
                 </p>
             </div>
-            <div class="flex shrink-0 gap-2">
+            <div class="flex shrink-0 flex-col gap-2">
                 <button
                     class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-50"
-                    :disabled="state === 'applying' || parsed?.action === 'unknown'"
+                    :disabled="state === 'applying' || parsed.action === 'unknown' || !parsed.target"
                     @click="apply"
                 >
                     <Loader2 v-if="state === 'applying'" class="h-4 w-4 animate-spin" />
@@ -168,7 +207,11 @@ function dismiss() {
                 </button>
             </div>
         </div>
-        <p v-if="parsed && parsed.confidence < 0.7" class="mt-2 text-xs text-amber-500">
+        <p v-if="parsed.action === 'unknown'" class="mt-2 text-xs text-amber-500">
+            Claude isn't sure — pick the action and fix the fields, then confirm.
+            Your correction teaches the parser.
+        </p>
+        <p v-else-if="parsed.confidence < 0.7" class="mt-2 text-xs text-amber-500">
             Low confidence — double-check before confirming.
         </p>
     </div>

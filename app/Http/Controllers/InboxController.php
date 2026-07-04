@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\InboxEvent;
+use App\Models\ParserExample;
 use App\Services\Inbox\InboxApplier;
 use App\Services\Inbox\ParserContract;
 use Illuminate\Http\JsonResponse;
@@ -28,10 +29,21 @@ class InboxController extends Controller
             'raw_text' => ['required', 'string', 'max:500'],
             'parsed' => ['required', 'array'],
             'parsed.action' => ['required', 'string'],
+            'corrected' => ['sometimes', 'boolean'],
         ]);
 
         // validate() strips nested keys it has no rules for — pass the full payload.
-        $event = $applier->apply($request->input('parsed'), $request->input('raw_text'));
+        $parsed = $request->input('parsed');
+        $event = $applier->apply($parsed, $request->input('raw_text'));
+
+        // User fixed the parse in the UI → teach the parser (spec §4:
+        // the 10 most recent corrections are injected into the prompt).
+        if ($request->boolean('corrected')) {
+            ParserExample::create([
+                'raw_text' => $request->input('raw_text'),
+                'corrected_json' => collect($parsed)->except('confidence')->all(),
+            ]);
+        }
 
         return response()->json(['event_id' => $event->id]);
     }
