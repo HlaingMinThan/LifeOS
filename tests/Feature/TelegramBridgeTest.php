@@ -81,4 +81,15 @@ class TelegramBridgeTest extends TestCase
 
         $this->assertStringContainsString('Nothing needs you today', $reply);
     }
+
+    public function test_tomorrow_previews_next_day(): void
+    {
+        Todo::factory()->create(['title' => 'laundry တင်ရန်', 'due_date' => today()->addDay()]);
+        Todo::factory()->create(['title' => 'not tomorrow', 'due_date' => today()->addDays(3)]);
+
+        $reply = app(InboxBridge::class)->handle($this->message('/tomorrow'));
+
+        $this->assertStringContainsString('laundry တင်ရန်', $reply);
+        $this->assertStringNotContainsString('not tomorrow', $reply);
+    }
 }

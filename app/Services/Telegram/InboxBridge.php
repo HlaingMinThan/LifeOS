@@ -49,8 +49,9 @@ class InboxBridge
         }
 
         return match ($text) {
-            '/start' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\n/today — digest · /undo — revert last",
+            '/start' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\n/today — digest · /tomorrow — preview · /undo — revert last",
             '/today' => $this->digest->build(),
+            '/tomorrow' => $this->digest->tomorrow(),
             '/undo' => $this->undoLatest(),
             // A multi-line message is a mini brain dump: one action per line.
             default => str_contains($text, "\n")

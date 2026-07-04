@@ -69,4 +69,37 @@ class DigestBuilder
 
         return implode("\n", $lines);
     }
+
+    /** Preview of tomorrow: due todos + care tasks landing that day. */
+    public function tomorrow(): string
+    {
+        $date = today()->addDay();
+        $lines = ['🗓 '.$date->format('D, j M Y')];
+
+        $care = CareTask::where('active', true)
+            ->whereDate('next_run_at', $date)->get();
+        if ($care->isNotEmpty()) {
+            $lines[] = '';
+            $lines[] = '💗 Care:';
+            foreach ($care as $task) {
+                $lines[] = "  • {$task->title}";
+            }
+        }
+
+        $todos = Todo::open()->whereDate('due_date', $date)->get();
+        if ($todos->isNotEmpty()) {
+            $lines[] = '';
+            $lines[] = '📌 Due tomorrow:';
+            foreach ($todos as $todo) {
+                $lines[] = "  • {$todo->title}";
+            }
+        }
+
+        if (count($lines) === 1) {
+            $lines[] = '';
+            $lines[] = 'Nothing scheduled for tomorrow 🌙';
+        }
+
+        return implode("\n", $lines);
+    }
 }
