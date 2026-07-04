@@ -130,10 +130,14 @@ class InboxApplier
 
     private function addTodo(array $parsed): Todo
     {
+        $dueTime = $parsed['due_time'] ?? null;
+
         return Todo::create([
             'title' => $parsed['target'] ?? 'Untitled',
             'bucket' => $parsed['bucket'] ?? 'personal',
-            'due_date' => $parsed['due'] ?? null,
+            // A time without a date means today — reminders need a date.
+            'due_date' => $parsed['due'] ?? ($dueTime ? today() : null),
+            'due_time' => $dueTime,
         ]);
     }
 

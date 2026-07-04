@@ -52,6 +52,7 @@ class ClaudeParser implements ParserContract
             'target' => $parsed['target'] ?? null,
             'amount_mmk' => $parsed['amount_mmk'] ?? null,
             'due' => $parsed['due'] ?? null,
+            'due_time' => $parsed['due_time'] ?? null,
             'bucket' => $parsed['bucket'] ?? null,
             'confidence' => (float) ($parsed['confidence'] ?? 0),
         ];
@@ -122,6 +123,7 @@ INSTRUCTIONS;
                     'target' => $item['target'] ?? null,
                     'amount_mmk' => $item['amount_mmk'] ?? null,
                     'due' => $item['due'] ?? null,
+                    'due_time' => $item['due_time'] ?? null,
                     'bucket' => $item['bucket'] ?? null,
                     'confidence' => (float) ($item['confidence'] ?? 0),
                 ],
@@ -149,12 +151,14 @@ INSTRUCTIONS;
         $today = now()->toDateString();
         $tomorrow = now()->addDay()->toDateString();
         $nextFriday = now()->next(5)->toDateString();
+        $nowTime = now()->format('H:i');
+        $inTwenty = now()->addMinutes(20)->format('H:i');
 
         return <<<PROMPT
 You convert one short life-management command into JSON. The user writes in
 Burmese, English, or mixed. Respond with ONLY minified JSON, no markdown.
 
-Today's date: {$today}
+Today's date: {$today} · Current time: {$nowTime}
 
 Burmese number units: သိန်း = 100,000 · သောင်း = 10,000 · ထောင် = 1,000
 "500k" = 500,000. "7 သိန်း" = 700,000.
@@ -182,7 +186,14 @@ Schema:
 {"action": one of [mark_paid, add_payable, add_receivable, income_received,
   add_todo, complete_todo, add_care_task, add_idea, unknown],
  "target": string, "amount_mmk": int|null, "due": "YYYY-MM-DD"|null,
- "bucket": "work"|"personal"|null, "confidence": 0-1}
+ "due_time": "HH:MM"|null, "bucket": "work"|"personal"|null,
+ "confidence": 0-1}
+
+Times: an explicit clock time ("10pm", "ည ၁၀ နာရီ") → due_time in 24h form,
+and due defaults to today if no date is given (tomorrow if that time already
+passed today). Relative times ("in 20 minutes", "နောက် ၁ နာရီနေရင်") →
+compute due_time from the current time above. Keep the spoken time words in
+the target text too.
 
 If confidence < 0.7 set action to "unknown" — the UI will ask, never guess big.
 
@@ -210,6 +221,12 @@ EXAMPLES:
 
 "mom အတွက် ဆေးဝယ်ရန် မနက်ဖြန်"
 → {"action":"add_todo","target":"mom အတွက် ဆေးဝယ်ရန်","due":"{$tomorrow}","bucket":"personal","confidence":0.85}
+
+"ည ၁၀ နာရီ ဆေးသောက်ရန်"
+→ {"action":"add_todo","target":"ည ၁၀ နာရီ ဆေးသောက်ရန်","due":"{$today}","due_time":"22:00","bucket":"personal","confidence":0.85}
+
+"in 20 mins check the rice cooker"
+→ {"action":"add_todo","target":"in 20 mins check the rice cooker","due":"{$today}","due_time":"{$inTwenty}","bucket":"personal","confidence":0.85}
 
 {$learned}
 PROMPT;

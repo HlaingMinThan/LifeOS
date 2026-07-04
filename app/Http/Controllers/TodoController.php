@@ -36,13 +36,21 @@ class TodoController extends Controller
 
     public function update(Request $request, Todo $todo): RedirectResponse
     {
-        $todo->update($request->validate([
+        $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:2000'],
             'bucket' => ['required', 'in:work,personal,money_task'],
             'due_date' => ['nullable', 'date'],
             'due_time' => ['nullable', 'date_format:H:i'],
-        ]));
+        ]);
+
+        // Rescheduling re-arms the reminder.
+        if ($todo->due_date?->toDateString() !== ($validated['due_date'] ?? null)
+            || substr($todo->due_time ?? '', 0, 5) !== ($validated['due_time'] ?? null)) {
+            $validated['reminded_at'] = null;
+        }
+
+        $todo->update($validated);
 
         return back();
     }

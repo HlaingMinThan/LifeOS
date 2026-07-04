@@ -39,6 +39,7 @@ class FakeParser implements ParserContract
             'target' => $target !== null && $target !== '' ? $target : null,
             'amount_mmk' => $amount,
             'due' => null,
+            'due_time' => null,
             'bucket' => $bucket,
             'confidence' => $confidence,
         ];

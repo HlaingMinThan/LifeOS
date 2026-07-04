@@ -19,6 +19,7 @@ type Parsed = {
     target: string | null;
     amount_mmk: number | null;
     due: string | null;
+    due_time: string | null;
     bucket: string | null;
     confidence: number;
 };
@@ -196,8 +197,10 @@ function dismiss() {
                 <p v-if="parsed.amount_mmk && AMOUNT_ACTIONS.includes(parsed.action)" class="text-xs text-muted-foreground">
                     = {{ formatMmk(parsed.amount_mmk) }}
                 </p>
-                <p v-if="parsed.due" class="text-xs text-muted-foreground">
-                    Due {{ formatDate(parsed.due) }}
+                <p v-if="parsed.due || parsed.due_time" class="text-xs text-muted-foreground">
+                    Due
+                    <template v-if="parsed.due">{{ formatDate(parsed.due) }}</template>
+                    <template v-if="parsed.due_time"> ⏰ {{ parsed.due_time }}</template>
                 </p>
             </div>
             <div class="flex shrink-0 flex-col gap-2">

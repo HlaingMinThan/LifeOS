@@ -11,14 +11,25 @@ class Todo extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['title', 'note', 'bucket', 'status', 'due_date', 'due_time', 'done_at'];
+    protected $fillable = ['title', 'note', 'bucket', 'status', 'due_date', 'due_time', 'reminded_at', 'done_at'];
 
     protected function casts(): array
     {
         return [
             'due_date' => 'date',
+            'reminded_at' => 'datetime',
             'done_at' => 'datetime',
         ];
+    }
+
+    /** Open, has a time, not yet reminded, and that moment has passed. */
+    public function scopeDueForReminder(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->open()
+            ->whereNotNull('due_date')
+            ->whereNotNull('due_time')
+            ->whereNull('reminded_at')
+            ->whereDate('due_date', '<=', today());
     }
 
     public function scopeOpen(Builder $query): Builder

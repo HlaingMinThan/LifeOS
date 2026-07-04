@@ -124,7 +124,8 @@ class InboxBridge
                 $this->applier->apply($parsed, $item['raw_text']);
                 $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
                 $amount = $parsed['amount_mmk'] ? ' · '.number_format($parsed['amount_mmk']).' Ks' : '';
-                $lines[] = "✅ {$label}: {$parsed['target']}{$amount}";
+                $time = ($parsed['due_time'] ?? null) ? " ⏰ {$parsed['due_time']}" : '';
+                $lines[] = "✅ {$label}: {$parsed['target']}{$amount}{$time}";
             } catch (ValidationException $e) {
                 $lines[] = "⚠️ {$item['raw_text']}: ".collect($e->errors())->flatten()->first();
             }
@@ -158,8 +159,9 @@ class InboxBridge
 
         $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
         $amount = $parsed['amount_mmk'] ? ' · '.number_format($parsed['amount_mmk']).' Ks' : '';
+        $time = ($parsed['due_time'] ?? null) ? " ⏰ {$parsed['due_time']}" : '';
 
-        return "✅ {$label}: {$parsed['target']}{$amount}\nWrong? /undo";
+        return "✅ {$label}: {$parsed['target']}{$amount}{$time}\nWrong? /undo";
     }
 
     private function undoLatest(): string
