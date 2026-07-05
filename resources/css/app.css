@@ -209,8 +209,9 @@
     --dp-font-size: 0.875rem;
 }
 /* Doubled selectors out-rank the library's own theme rules, which are
-   injected after app.css by the component-level import. */
-.dp__theme_light.dp__theme_light {
+   injected after app.css by the component-level import.
+   (v14 renamed theme classes to .dp--theme-*) */
+.dp--theme-light.dp--theme-light {
     --dp-background-color: var(--card);
     --dp-text-color: var(--card-foreground);
     --dp-border-color: var(--input);
@@ -223,7 +224,7 @@
     --dp-hover-text-color: var(--card-foreground);
     --dp-icon-color: var(--muted-foreground);
 }
-.dp__theme_dark.dp__theme_dark {
+.dp--theme-dark.dp--theme-dark {
     --dp-background-color: var(--card);
     --dp-text-color: var(--card-foreground);
     --dp-border-color: var(--input);
