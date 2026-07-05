@@ -156,6 +156,13 @@ class InboxBridge
             return "🤔 Not sure what to do with that.\nTry rephrasing, or use the app's confirm box to teach me.";
         }
 
+        // A question about a date answers with that day, applies nothing.
+        if ($parsed['action'] === 'show_day') {
+            return ($parsed['due'] ?? null)
+                ? $this->digest->forDate(\Illuminate\Support\Facades\Date::parse($parsed['due']))
+                : $this->askForDate();
+        }
+
         try {
             $this->applier->apply($parsed, $text);
         } catch (ValidationException $e) {

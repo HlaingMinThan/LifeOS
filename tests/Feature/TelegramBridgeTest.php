@@ -115,6 +115,18 @@ class TelegramBridgeTest extends TestCase
         $this->assertStringContainsString('Nothing needs you today', $reply);
     }
 
+    public function test_natural_language_date_query_returns_day_view(): void
+    {
+        Todo::factory()->create(['title' => 'monday plan', 'due_date' => '2026-07-06']);
+
+        $reply = app(InboxBridge::class)->handle($this->message('give me todos for 2026-07-06'));
+
+        $this->assertStringContainsString('Mon, 6 Jul 2026', $reply);
+        $this->assertStringContainsString('monday plan', $reply);
+        // A question never writes anything.
+        $this->assertSame(0, InboxEvent::count());
+    }
+
     public function test_bare_word_commands_work_without_slash(): void
     {
         $bridge = app(InboxBridge::class);

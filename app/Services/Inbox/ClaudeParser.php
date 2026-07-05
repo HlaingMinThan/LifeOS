@@ -202,6 +202,7 @@ INSTRUCTIONS;
         $soon = now()->addMinutes(1);
         $soonSpoken = strtolower($soon->format('g:ia'));
         $soonTime = $soon->format('H:i');
+        $todaySpoken = strtolower(now()->format('F j'));
 
         return <<<PROMPT
 You convert one short life-management command into JSON. The user writes in
@@ -240,7 +241,7 @@ Target rules:
 
 Schema:
 {"action": one of [mark_paid, add_payable, add_receivable, income_received,
-  add_todo, complete_todo, add_care_task, add_idea, unknown],
+  add_todo, complete_todo, add_care_task, add_idea, show_day, unknown],
  "target": string, "amount_mmk": int|null, "due": "YYYY-MM-DD"|null,
  "due_time": "HH:MM"|null, "bucket": "work"|"personal"|null,
  "confidence": 0-1}
@@ -251,6 +252,10 @@ time is strictly BEFORE the current time shown above — a time equal to or
 after the current time, even one minute ahead, is TODAY. Relative times
 ("in 20 minutes", "နောက် ၁ နာရီနေရင်") → compute due_time from the current
 time above. Keep the spoken time words in the target text too.
+
+show_day: the user is ASKING what is on a date, not adding anything
+("give me todos for july 5", "july 5 2026", "မနက်ဖြန် ဘာရှိလဲ", or a bare
+date by itself) → {"action":"show_day","due":"YYYY-MM-DD"}.
 
 If confidence < 0.7 set action to "unknown" — the UI will ask, never guess big.
 
@@ -284,6 +289,9 @@ EXAMPLES:
 
 "in 20 mins check the rice cooker"
 → {"action":"add_todo","target":"in 20 mins check the rice cooker","due":"{$today}","due_time":"{$inTwenty}","bucket":"personal","confidence":0.85}
+
+"give me todos for {$todaySpoken}"
+→ {"action":"show_day","due":"{$today}","confidence":0.95}
 
 "remind me to call dad at {$soonSpoken}"
 → {"action":"add_todo","target":"call dad at {$soonSpoken}","due":"{$today}","due_time":"{$soonTime}","bucket":"personal","confidence":0.85}

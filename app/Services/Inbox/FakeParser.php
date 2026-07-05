@@ -17,6 +17,17 @@ class FakeParser implements ParserContract
         $amount = $this->extractAmount($t);
         $contact = $this->matchContact($t);
 
+        // "todos for <date>" → day lookup (mirrors the claude show_day action)
+        if (preg_match('/todos? for (.+)$/iu', $t, $m)) {
+            try {
+                $due = \Illuminate\Support\Facades\Date::parse(trim($m[1]))->toDateString();
+
+                return array_merge($this->result('show_day', null, null, 0.95), ['due' => $due]);
+            } catch (\Throwable) {
+                // fall through to normal matching
+            }
+        }
+
         return match (true) {
             $this->hasAny($t, ['ဝင်ပြီ', 'received', 'ရရှိ']) => $this->result('income_received', $contact ?? $this->cleanTitle($t), $amount),
             $this->hasAny($t, ['paid', 'ပေးပြီး', 'ဆပ်ပြီး']) => $this->result('mark_paid', $contact ?? $this->cleanTitle($t), $amount),

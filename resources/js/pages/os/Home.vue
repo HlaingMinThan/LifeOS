@@ -41,6 +41,7 @@ const ACTION_LABELS: Record<string, string> = {
     complete_todo: 'Complete todo',
     add_care_task: 'New care task',
     add_idea: 'Park idea',
+    show_day: 'Day lookup (ask in Telegram)',
     unknown: 'Not sure…',
 };
 
@@ -215,7 +216,7 @@ function dismiss() {
             <div class="flex shrink-0 flex-col gap-2">
                 <button
                     class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-50"
-                    :disabled="state === 'applying' || parsed.action === 'unknown' || !parsed.target"
+                    :disabled="state === 'applying' || parsed.action === 'unknown' || parsed.action === 'show_day' || !parsed.target"
                     @click="apply"
                 >
                     <Loader2 v-if="state === 'applying'" class="h-4 w-4 animate-spin" />
