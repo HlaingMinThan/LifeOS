@@ -164,8 +164,14 @@ class InboxBridge
         $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
         $amount = $parsed['amount_mmk'] ? ' · '.number_format($parsed['amount_mmk']).' Ks' : '';
         $time = ($parsed['due_time'] ?? null) ? ' ⏰ '.$this->fmtTime($parsed['due_time']) : '';
+        $when = trim($this->fmtDue($parsed).$time);
 
-        return "✅ {$label}: {$parsed['target']}{$amount}{$this->fmtDue($parsed)}{$time}\nWrong? /undo";
+        return implode("\n", array_filter([
+            "✅ {$label}",
+            $parsed['target'].$amount,
+            $when !== '' ? $when : null,
+            'Wrong? /undo',
+        ]));
     }
 
     /** "22:43" → "10:43pm" */
