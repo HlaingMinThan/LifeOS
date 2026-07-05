@@ -25,7 +25,7 @@ class BrainDumpParser
         }
 
         return collect(preg_split('/\r?\n/', $text))
-            ->map(fn ($line) => trim(preg_replace('/^[-•*၊။]+\s*/u', '', trim($line))))
+            ->map(fn ($line) => trim(preg_replace('/^[-–—⁃•*၊။]+\s*/u', '', trim($line))))
             ->filter()
             ->values()
             ->map(function (string $line) {

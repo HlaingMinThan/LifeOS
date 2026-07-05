@@ -85,6 +85,35 @@ NOT appear in the array. Instead its meaning applies to EVERY line below
 it (until the next header): a date header sets "due" on all of them.
 Times of day stay inside the target text; only the date goes in "due".
 
+CRITICAL — SECTION headers decide the action of every line below them,
+until the next header. Map the section meaning, whatever its exact words:
+- money to pay (ပေးစရာငွေ, expenses, payables) → add_payable
+- money coming in (ဝင်ငွေ, income, receivables) → add_receivable
+- todo sections → add_todo; bucket comes from the header
+  ("work todos" → work, "personal todos" → personal)
+- a person's care section ("X အတွက်", care) → add_care_task
+- idea sections (ideas, "work idea") → add_idea
+In a pasted list, bare "Name - amount" lines describe existing state:
+they are NEW records typed by their section — NEVER mark_paid and NEVER
+income_received (nothing in a list "just happened").
+
+SECTION EXAMPLE:
+"ပေးစရာငွေ
+ko ko - 200,000
+Income
+- shop A - 50000
+work todos
+- website update လုပ်ရန်
+kaly အတွက်
+- surprise gift ပို့ရန်
+Work idea
+- coffee shop"
+→ [{"raw":"ko ko - 200,000","action":"add_payable","target":"Ko Ko","amount_mmk":200000,"confidence":0.9},
+{"raw":"shop A - 50000","action":"add_receivable","target":"shop A","amount_mmk":50000,"confidence":0.9},
+{"raw":"website update လုပ်ရန်","action":"add_todo","target":"website update လုပ်ရန်","bucket":"work","confidence":0.9},
+{"raw":"surprise gift ပို့ရန်","action":"add_care_task","target":"surprise gift ပို့ရန်","confidence":0.9},
+{"raw":"coffee shop","action":"add_idea","target":"coffee shop","confidence":0.9}]
+
 CRITICAL — date references: "အဲ့နေ့" / "that day" / "same day" means the
 most recently mentioned date in the message. Resolve it — never leave
 "due" empty when a reference points to a known date.
@@ -102,9 +131,11 @@ INSTRUCTIONS;
         $response = Http::withHeaders([
             'x-api-key' => config('lifeos.anthropic.key'),
             'anthropic-version' => '2023-06-01',
-        ])->timeout(60)->retry(2, 300)->post('https://api.anthropic.com/v1/messages', [
+        ])->timeout(120)->retry(2, 300)->post('https://api.anthropic.com/v1/messages', [
             'model' => config('lifeos.anthropic.model'),
-            'max_tokens' => 4000,
+            // Burmese is token-dense and every item carries raw + target;
+            // a 30-line dump needs far more than a chat reply.
+            'max_tokens' => 16000,
             'thinking' => ['type' => 'disabled'],
             'system' => $this->systemPrompt().$batchInstructions,
             'messages' => [['role' => 'user', 'content' => $text]],
@@ -118,6 +149,9 @@ INSTRUCTIONS;
 
         $responseText = collect($response->json('content', []))
             ->firstWhere('type', 'text')['text'] ?? '';
+
+        // Defensive: strip markdown fences if the model wraps the array.
+        $responseText = trim(preg_replace('/^```(?:json)?|```$/m', '', trim($responseText)));
 
         $items = json_decode($responseText, true);
 
