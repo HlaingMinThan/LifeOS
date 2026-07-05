@@ -45,6 +45,19 @@ class DigestBuilder
             }
         }
 
+        // Undated todos would otherwise be invisible to every digest.
+        $undated = Todo::open()->whereNull('due_date')->latest()->get();
+        if ($undated->isNotEmpty()) {
+            $lines[] = '';
+            $lines[] = '📝 Open (no date):';
+            foreach ($undated->take(8) as $todo) {
+                $lines[] = "  • {$todo->title}";
+            }
+            if ($undated->count() > 8) {
+                $lines[] = '  … and '.($undated->count() - 8).' more';
+            }
+        }
+
         // Money dated in the future belongs to that day's view, not today's.
         $relevantToday = fn ($query) => $query->where(
             fn ($q) => $q->whereNull('due_date')->orWhereDate('due_date', '<=', today()),

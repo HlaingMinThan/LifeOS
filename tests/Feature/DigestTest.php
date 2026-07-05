@@ -34,6 +34,18 @@ class DigestTest extends TestCase
         $this->assertStringContainsString('Cargo Pro fee — 780,000 Ks', $digest);
     }
 
+    public function test_undated_open_todos_appear_in_daily_digest(): void
+    {
+        Todo::factory()->create(['title' => 'Journaling ပြန်ရေးရမယ်']);
+        Todo::factory()->done()->create(['title' => 'finished undated']);
+
+        $digest = app(DigestBuilder::class)->build();
+
+        $this->assertStringContainsString('📝 Open (no date):', $digest);
+        $this->assertStringContainsString('Journaling ပြန်ရေးရမယ်', $digest);
+        $this->assertStringNotContainsString('finished undated', $digest);
+    }
+
     public function test_empty_digest_celebrates(): void
     {
         $this->assertStringContainsString('Nothing needs you today', app(DigestBuilder::class)->build());
