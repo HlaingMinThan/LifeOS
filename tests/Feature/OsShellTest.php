@@ -20,6 +20,7 @@ class OsShellTest extends TestCase
             ['/todos', 'os/Todos'],
             ['/care', 'os/Care'],
             ['/ideas', 'os/Ideas'],
+            ['/profile', 'os/Profile'],
         ];
     }
 

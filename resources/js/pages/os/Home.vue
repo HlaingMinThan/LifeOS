@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Check, Loader2, RotateCcw, Send, X } from 'lucide-vue-next';
+import { Check, Loader2, RotateCcw, Send, UserRound, X } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { apiPost } from '@/lib/api';
 import { formatDate, formatMmk, formatTime } from '@/lib/format';
@@ -123,12 +123,20 @@ function dismiss() {
                 Everything that needs you, on one screen.
             </p>
         </div>
-        <Link
-            href="/onboard"
-            class="mt-1 shrink-0 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
-        >
-            Import
-        </Link>
+        <div class="mt-1 flex shrink-0 items-center gap-2">
+            <Link
+                href="/onboard"
+                class="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
+            >
+                Import
+            </Link>
+            <Link
+                href="/profile"
+                class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-brand text-white shadow-md shadow-fuchsia-500/20"
+            >
+                <UserRound class="h-4 w-4" />
+            </Link>
+        </div>
     </div>
 
     <form class="mt-4 flex gap-2" @submit.prevent="parse">
