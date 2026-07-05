@@ -115,6 +115,18 @@ class TelegramBridgeTest extends TestCase
         $this->assertStringContainsString('Nothing needs you today', $reply);
     }
 
+    public function test_bare_word_commands_work_without_slash(): void
+    {
+        $bridge = app(InboxBridge::class);
+
+        $this->assertStringContainsString('Nothing needs you today', $bridge->handle($this->message('today')));
+        $this->assertStringContainsString('Nothing needs you today', $bridge->handle($this->message('Tdy')));
+        $this->assertStringContainsString('Nothing on this day', $bridge->handle($this->message('tmr')));
+        $this->assertStringContainsString('Nothing to undo', $bridge->handle($this->message('undo')));
+        // Bare command words must NOT become todos.
+        $this->assertSame(0, InboxEvent::count());
+    }
+
     public function test_tomorrow_previews_next_day(): void
     {
         Todo::factory()->create(['title' => 'laundry တင်ရန်', 'due_date' => today()->addDay()]);

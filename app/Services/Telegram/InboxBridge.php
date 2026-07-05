@@ -52,15 +52,16 @@ class InboxBridge
             return null;
         }
 
-        return match ($text) {
-            '/start' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\n/today · /tomorrow · /yesterday · /todobydate · /care · /idea · /undo",
-            '/today' => $this->digest->build(),
-            '/tomorrow', '/tmr' => $this->digest->forDate(today()->addDay()),
-            '/yesterday' => $this->digest->forDate(today()->subDay()),
-            '/todobydate' => $this->askForDate(),
-            '/care' => $this->listCareTasks(),
-            '/idea', '/ideas' => $this->listIdeas(),
-            '/undo' => $this->undoLatest(),
+        // Commands work with or without the slash: "today", "/today", "tdy"…
+        return match (strtolower(ltrim($text, '/'))) {
+            'start', 'help' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\nCommands (slash optional): today/tdy · tomorrow/tmr · yesterday · todobydate · care · idea · undo",
+            'today', 'tdy' => $this->digest->build(),
+            'tomorrow', 'tmr' => $this->digest->forDate(today()->addDay()),
+            'yesterday' => $this->digest->forDate(today()->subDay()),
+            'todobydate' => $this->askForDate(),
+            'care' => $this->listCareTasks(),
+            'idea', 'ideas' => $this->listIdeas(),
+            'undo' => $this->undoLatest(),
             default => $this->freeText($text),
         };
     }
