@@ -199,6 +199,9 @@ INSTRUCTIONS;
         $nextFriday = now()->next(5)->toDateString();
         $nowTime = now()->format('H:i');
         $inTwenty = now()->addMinutes(20)->format('H:i');
+        $soon = now()->addMinutes(1);
+        $soonSpoken = strtolower($soon->format('g:ia'));
+        $soonTime = $soon->format('H:i');
 
         return <<<PROMPT
 You convert one short life-management command into JSON. The user writes in
@@ -243,10 +246,11 @@ Schema:
  "confidence": 0-1}
 
 Times: an explicit clock time ("10pm", "ည ၁၀ နာရီ") → due_time in 24h form,
-and due defaults to today if no date is given (tomorrow if that time already
-passed today). Relative times ("in 20 minutes", "နောက် ၁ နာရီနေရင်") →
-compute due_time from the current time above. Keep the spoken time words in
-the target text too.
+and due defaults to today if no date is given. Use tomorrow ONLY when the
+time is strictly BEFORE the current time shown above — a time equal to or
+after the current time, even one minute ahead, is TODAY. Relative times
+("in 20 minutes", "နောက် ၁ နာရီနေရင်") → compute due_time from the current
+time above. Keep the spoken time words in the target text too.
 
 If confidence < 0.7 set action to "unknown" — the UI will ask, never guess big.
 
@@ -280,6 +284,10 @@ EXAMPLES:
 
 "in 20 mins check the rice cooker"
 → {"action":"add_todo","target":"in 20 mins check the rice cooker","due":"{$today}","due_time":"{$inTwenty}","bucket":"personal","confidence":0.85}
+
+"remind me to call dad at {$soonSpoken}"
+→ {"action":"add_todo","target":"call dad at {$soonSpoken}","due":"{$today}","due_time":"{$soonTime}","bucket":"personal","confidence":0.85}
+(one minute ahead of the current time = still TODAY, never tomorrow)
 
 {$learned}
 PROMPT;
