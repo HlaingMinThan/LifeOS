@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { Heart, Pause, Pencil, Play, Plus, Trash2 } from 'lucide-vue-next';
 import { reactive, ref } from 'vue';
+import DateTimeField from '@/components/DateTimeField.vue';
 import { formatTime } from '@/lib/format';
 
 type CareTask = {
@@ -131,11 +132,7 @@ function scheduleSummary(t: CareTask): string {
                 <option value="weekly">Weekly</option>
                 <option value="random">Surprise (random) 🎲</option>
             </select>
-            <input
-                v-model="form.time_of_day"
-                type="time"
-                class="w-28 rounded-lg border border-input bg-background px-2 py-2 text-sm outline-none"
-            />
+            <DateTimeField v-model="form.time_of_day" mode="time" class="w-32" placeholder="Time" />
         </div>
         <select
             v-if="form.schedule_type === 'weekly'"

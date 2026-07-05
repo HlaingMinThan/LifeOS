@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { Check, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-vue-next';
 import { reactive, ref } from 'vue';
+import DateTimeField from '@/components/DateTimeField.vue';
 import SwipeRow from '@/components/SwipeRow.vue';
 import { formatDate, formatMmk } from '@/lib/format';
 
@@ -136,11 +137,7 @@ const section = (direction: string) =>
                 placeholder="Amount (Ks)"
                 class="flex-1 rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
             />
-            <input
-                v-model="form.due_date"
-                type="date"
-                class="w-40 rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none"
-            />
+            <DateTimeField v-model="form.due_date" mode="date" class="w-40" placeholder="Due date" />
         </div>
         <p v-if="form.amount_mmk" class="text-xs text-muted-foreground">
             = {{ formatMmk(form.amount_mmk) }}

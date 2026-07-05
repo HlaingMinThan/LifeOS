@@ -201,6 +201,38 @@
     }
 }
 
+/* Vue Datepicker — match the app's inputs and brand colors */
+:root {
+    --dp-font-family: var(--font-sans);
+    --dp-border-radius: 0.5rem;
+    --dp-input-padding: 6px 30px 6px 12px;
+    --dp-font-size: 0.875rem;
+}
+.dp__theme_light {
+    --dp-background-color: var(--card);
+    --dp-text-color: var(--card-foreground);
+    --dp-border-color: var(--input);
+    --dp-menu-border-color: var(--border);
+    --dp-border-color-hover: var(--ring);
+    --dp-border-color-focus: var(--ring);
+    --dp-primary-color: hsl(275 70% 40%);
+    --dp-primary-text-color: #fff;
+    --dp-hover-color: hsl(282 30% 95%);
+    --dp-icon-color: var(--muted-foreground);
+}
+.dp__theme_dark {
+    --dp-background-color: var(--card);
+    --dp-text-color: var(--card-foreground);
+    --dp-border-color: var(--input);
+    --dp-menu-border-color: var(--border);
+    --dp-border-color-hover: var(--ring);
+    --dp-border-color-focus: var(--ring);
+    --dp-primary-color: hsl(272 75% 62%);
+    --dp-primary-text-color: #fff;
+    --dp-hover-color: hsl(271 24% 16%);
+    --dp-icon-color: var(--muted-foreground);
+}
+
 /* Smooth open/close for forms, chips, and banners (Vue <Transition name="form">) */
 .form-enter-active,
 .form-leave-active {

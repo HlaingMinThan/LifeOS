@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { Check, Loader2, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
+import DateTimeField from '@/components/DateTimeField.vue';
 import { apiPost } from '@/lib/api';
 import { formatMmk } from '@/lib/format';
 
@@ -156,11 +157,12 @@ async function confirmAll() {
                         <Trash2 class="h-3.5 w-3.5" />
                     </button>
                 </div>
-                <input
+                <DateTimeField
                     v-if="DATED_ACTIONS.includes(item.parsed.action)"
                     v-model="item.parsed.due"
-                    type="date"
-                    class="mt-2 w-36 rounded-lg border border-input bg-card px-2 py-1 text-xs text-muted-foreground outline-none"
+                    mode="date"
+                    class="mt-2 w-40"
+                    placeholder="Due date"
                 />
             </li>
         </ul>
