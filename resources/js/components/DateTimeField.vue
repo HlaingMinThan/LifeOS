@@ -31,9 +31,9 @@ onMounted(() => {
         :teleport="true"
         auto-apply
         :time-picker="props.mode === 'time'"
-        :enable-time-picker="props.mode === 'time'"
+        :time-config="{ enableTimePicker: props.mode === 'time', is24: false }"
         :model-type="props.mode === 'time' ? 'HH:mm' : 'yyyy-MM-dd'"
+        :formats="{ input: props.mode === 'time' ? 'h:mm aa' : 'dd MMM yyyy' }"
         :placeholder="props.placeholder || (props.mode === 'time' ? 'Time' : 'Date')"
-        :is-24="false"
     />
 </template>

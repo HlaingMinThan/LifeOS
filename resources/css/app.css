@@ -208,7 +208,9 @@
     --dp-input-padding: 6px 30px 6px 12px;
     --dp-font-size: 0.875rem;
 }
-.dp__theme_light {
+/* Doubled selectors out-rank the library's own theme rules, which are
+   injected after app.css by the component-level import. */
+.dp__theme_light.dp__theme_light {
     --dp-background-color: var(--card);
     --dp-text-color: var(--card-foreground);
     --dp-border-color: var(--input);
@@ -218,9 +220,10 @@
     --dp-primary-color: hsl(275 70% 40%);
     --dp-primary-text-color: #fff;
     --dp-hover-color: hsl(282 30% 95%);
+    --dp-hover-text-color: var(--card-foreground);
     --dp-icon-color: var(--muted-foreground);
 }
-.dp__theme_dark {
+.dp__theme_dark.dp__theme_dark {
     --dp-background-color: var(--card);
     --dp-text-color: var(--card-foreground);
     --dp-border-color: var(--input);
@@ -230,6 +233,7 @@
     --dp-primary-color: hsl(272 75% 62%);
     --dp-primary-text-color: #fff;
     --dp-hover-color: hsl(271 24% 16%);
+    --dp-hover-text-color: var(--card-foreground);
     --dp-icon-color: var(--muted-foreground);
 }
 
