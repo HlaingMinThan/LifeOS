@@ -31,18 +31,17 @@ class DigestBuilder
         if ($overdue->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '🔴 Overdue:';
-            foreach ($overdue as $todo) {
-                $lines[] = "  • {$todo->title} (due {$todo->due_date->format('j M')})";
-            }
+            array_push($lines, ...$this->groupedTodoLines(
+                $overdue,
+                fn ($todo) => "• {$todo->title} (due {$todo->due_date->format('j M')})",
+            ));
         }
 
         $today = Todo::open()->whereDate('due_date', today())->get();
         if ($today->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '📌 Due today:';
-            foreach ($today as $todo) {
-                $lines[] = "  • {$todo->title}";
-            }
+            array_push($lines, ...$this->groupedTodoLines($today));
         }
 
         // Undated todos would otherwise be invisible to every digest.
@@ -50,9 +49,7 @@ class DigestBuilder
         if ($undated->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '📝 Open (no date):';
-            foreach ($undated->take(8) as $todo) {
-                $lines[] = "  • {$todo->title}";
-            }
+            array_push($lines, ...$this->groupedTodoLines($undated->take(8)));
             if ($undated->count() > 8) {
                 $lines[] = '  … and '.($undated->count() - 8).' more';
             }
@@ -108,10 +105,10 @@ class DigestBuilder
         if ($todos->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '📌 Todos:';
-            foreach ($todos as $todo) {
-                $mark = $todo->status === 'done' ? '✅' : '⭕';
-                $lines[] = "  {$mark} {$todo->title}";
-            }
+            array_push($lines, ...$this->groupedTodoLines(
+                $todos,
+                fn ($todo) => ($todo->status === 'done' ? '✅' : '⭕')." {$todo->title}",
+            ));
         }
 
         $money = LedgerEntry::open()->whereDate('due_date', $date)->with('contact')->get();
@@ -131,5 +128,26 @@ class DigestBuilder
         }
 
         return implode("\n", $lines);
+    }
+
+    /** Todos grouped by bucket (Work / Personal / Money), skipping empty groups. */
+    private function groupedTodoLines($todos, ?callable $format = null): array
+    {
+        $format ??= fn ($todo) => "• {$todo->title}";
+        $lines = [];
+
+        foreach (['work' => 'Work', 'personal' => 'Personal', 'money_task' => 'Money'] as $bucket => $label) {
+            $group = $todos->where('bucket', $bucket);
+            if ($group->isEmpty()) {
+                continue;
+            }
+
+            $lines[] = "  {$label}:";
+            foreach ($group as $todo) {
+                $lines[] = '   '.$format($todo);
+            }
+        }
+
+        return $lines;
     }
 }

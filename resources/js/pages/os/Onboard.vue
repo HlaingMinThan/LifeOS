@@ -27,6 +27,8 @@ const ACTION_LABELS: Record<string, string> = {
     unknown: 'Not sure…',
 };
 const ACTION_OPTIONS = Object.entries(ACTION_LABELS).filter(([k]) => k !== 'unknown');
+// Actions where a due date makes sense (ideas and settle-actions don't take one).
+const DATED_ACTIONS = ['add_todo', 'add_payable', 'add_receivable', 'add_care_task'];
 
 const text = ref('');
 const items = ref<Item[]>([]);
@@ -50,6 +52,16 @@ async function parseDump() {
 
 function remove(index: number) {
     items.value.splice(index, 1);
+}
+
+/** Fill today's date on every datable row that has no date yet. */
+function setAllToToday() {
+    const today = new Date().toISOString().slice(0, 10);
+    for (const item of items.value) {
+        if (DATED_ACTIONS.includes(item.parsed.action) && !item.parsed.due) {
+            item.parsed.due = today;
+        }
+    }
 }
 
 async function confirmAll() {
@@ -101,9 +113,17 @@ async function confirmAll() {
     </template>
 
     <template v-if="state === 'review' || state === 'applying'">
-        <p class="mt-4 text-sm text-muted-foreground">
-            {{ items.length }} items — fix anything that's wrong, remove what you don't want.
-        </p>
+        <div class="mt-4 flex items-center justify-between gap-2">
+            <p class="text-sm text-muted-foreground">
+                {{ items.length }} items — fix anything that's wrong.
+            </p>
+            <button
+                class="shrink-0 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                @click="setAllToToday"
+            >
+                Set empty dates → today
+            </button>
+        </div>
         <ul class="mt-3 space-y-2">
             <li
                 v-for="(item, i) in items"
@@ -136,6 +156,12 @@ async function confirmAll() {
                         <Trash2 class="h-3.5 w-3.5" />
                     </button>
                 </div>
+                <input
+                    v-if="DATED_ACTIONS.includes(item.parsed.action)"
+                    v-model="item.parsed.due"
+                    type="date"
+                    class="mt-2 w-36 rounded-lg border border-input bg-card px-2 py-1 text-xs text-muted-foreground outline-none"
+                />
             </li>
         </ul>
         <button

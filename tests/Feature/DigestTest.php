@@ -34,6 +34,22 @@ class DigestTest extends TestCase
         $this->assertStringContainsString('Cargo Pro fee — 780,000 Ks', $digest);
     }
 
+    public function test_digest_todos_are_grouped_by_bucket(): void
+    {
+        Todo::factory()->create(['title' => 'fb content plan', 'bucket' => 'work']);
+        Todo::factory()->create(['title' => 'buy groceries', 'bucket' => 'personal']);
+
+        $digest = app(DigestBuilder::class)->build();
+
+        $work = strpos($digest, 'Work:');
+        $personal = strpos($digest, 'Personal:');
+        $this->assertNotFalse($work);
+        $this->assertNotFalse($personal);
+        $this->assertGreaterThan($work, strpos($digest, 'fb content plan'));
+        $this->assertGreaterThan($personal, strpos($digest, 'buy groceries'));
+        $this->assertLessThan($personal, strpos($digest, 'fb content plan'));
+    }
+
     public function test_undated_open_todos_appear_in_daily_digest(): void
     {
         Todo::factory()->create(['title' => 'Journaling ပြန်ရေးရမယ်']);
