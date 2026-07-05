@@ -131,7 +131,9 @@ INSTRUCTIONS;
         $response = Http::withHeaders([
             'x-api-key' => config('lifeos.anthropic.key'),
             'anthropic-version' => '2023-06-01',
-        ])->timeout(120)->retry(2, 300)->post('https://api.anthropic.com/v1/messages', [
+        // One retry only: each attempt can hold a PHP worker for the full
+        // timeout, and a stuck worker is what makes other tabs queue.
+        ])->timeout(90)->retry(1, 500)->post('https://api.anthropic.com/v1/messages', [
             'model' => config('lifeos.anthropic.model'),
             // Burmese is token-dense and every item carries raw + target;
             // a 30-line dump needs far more than a chat reply.
