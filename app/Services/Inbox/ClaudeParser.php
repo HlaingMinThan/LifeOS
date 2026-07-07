@@ -196,6 +196,16 @@ INSTRUCTIONS;
             ->map(fn ($ex) => "\"{$ex->raw_text}\"\n→ ".json_encode($ex->corrected_json, JSON_UNESCAPED_UNICODE))
             ->implode("\n\n");
 
+        // Short-term memory: follow-up messages ("ပြီးရင် …") refer to these.
+        $recent = \App\Models\InboxEvent::where('created_at', '>=', now()->subMinutes(30))
+            ->latest('id')->take(5)->get()->reverse()
+            ->map(function ($event) {
+                $due = $event->parsed_json['due'] ?? null;
+
+                return '- "'.$event->raw_text.'"'.($due ? " (due {$due})" : '');
+            })
+            ->implode("\n") ?: '(none)';
+
         $today = now()->toDateString();
         $tomorrow = now()->addDay()->toDateString();
         $nextFriday = now()->next(5)->toDateString();
@@ -254,6 +264,12 @@ time is strictly BEFORE the current time shown above — a time equal to or
 after the current time, even one minute ahead, is TODAY. Relative times
 ("in 20 minutes", "နောက် ၁ နာရီနေရင်") → compute due_time from the current
 time above. Keep the spoken time words in the target text too.
+
+Recent commands from the last 30 minutes (oldest first):
+{$recent}
+A message that STARTS with a connector (ပြီးရင်, ပီးရင်, ပြီးတော့, "then",
+"after that") continues the most recent command above: inherit its due
+date (same day) unless this message states a new date itself.
 
 show_day: the user is ASKING what is on a date, not adding anything
 ("give me todos for july 5", "july 5 2026", "မနက်ဖြန် ဘာရှိလဲ", or a bare
