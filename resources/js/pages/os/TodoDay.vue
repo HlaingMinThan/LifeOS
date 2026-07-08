@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Check, Pencil, Plus, Trash2 } from 'lucide-vue-next';
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import SwipeRow from '@/components/SwipeRow.vue';
 import { formatTime } from '@/lib/format';
@@ -85,6 +85,13 @@ function saveForm() {
 }
 
 const inBucket = (bucket: string) => props.todos.filter((t) => t.bucket === bucket);
+
+// The calendar's + button lands here with ?new=1 — open the form directly.
+onMounted(() => {
+    if (new URLSearchParams(window.location.search).get('new')) {
+        startNew();
+    }
+});
 </script>
 
 <template>

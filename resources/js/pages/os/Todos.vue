@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ChevronLeft, ChevronRight, FileQuestion } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, FileQuestion, Plus } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 type DayCount = { open: number; done: number };
@@ -43,8 +43,18 @@ const openDay = (day: number) => router.visit(`/todos/day/${iso(day)}`);
 <template>
     <Head title="Todos" />
 
-    <h1 class="text-2xl font-bold text-gradient-brand">Todos</h1>
-    <p class="mt-1 text-sm text-muted-foreground">Tap a day to see or add its todos.</p>
+    <div class="flex items-start justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gradient-brand">Todos</h1>
+            <p class="mt-1 text-sm text-muted-foreground">Tap a day to see or add its todos.</p>
+        </div>
+        <Link
+            :href="`/todos/day/${todayIso}?new=1`"
+            class="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-white shadow-md shadow-fuchsia-500/20 transition-transform active:scale-95"
+        >
+            <Plus class="h-5 w-5" />
+        </Link>
+    </div>
 
     <!-- Month navigation -->
     <div class="mt-4 flex items-center justify-between">

@@ -2,6 +2,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { Check, Loader2, RotateCcw, Send, UserRound, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import DateTimeField from '@/components/DateTimeField.vue';
 import { apiPost } from '@/lib/api';
 import { formatDate, formatMmk, formatTime } from '@/lib/format';
 
@@ -73,6 +74,7 @@ const ACTION_LABELS: Record<string, string> = {
 const ACTION_OPTIONS = Object.entries(ACTION_LABELS).filter(([k]) => k !== 'unknown');
 const BUCKET_ACTIONS = ['add_todo', 'complete_todo'];
 const AMOUNT_ACTIONS = ['mark_paid', 'add_payable', 'add_receivable', 'income_received'];
+const DATED_ACTIONS = ['add_todo', 'add_payable', 'add_receivable', 'add_care_task'];
 
 const text = ref('');
 const state = ref<'idle' | 'parsing' | 'confirm' | 'applying' | 'applied'>('idle');
@@ -229,11 +231,16 @@ function dismiss() {
                 <p v-if="parsed.amount_mmk && AMOUNT_ACTIONS.includes(parsed.action)" class="text-xs text-muted-foreground">
                     = {{ formatMmk(parsed.amount_mmk) }}
                 </p>
-                <p v-if="parsed.due || parsed.due_time" class="text-xs text-muted-foreground">
-                    Due
-                    <template v-if="parsed.due">{{ formatDate(parsed.due) }}</template>
-                    <template v-if="parsed.due_time"> ⏰ {{ formatTime(parsed.due_time) }}</template>
-                </p>
+                <div v-if="DATED_ACTIONS.includes(parsed.action)" class="flex gap-2">
+                    <DateTimeField v-model="parsed.due" mode="date" class="flex-1" placeholder="Due date" />
+                    <DateTimeField
+                        v-if="parsed.action === 'add_todo'"
+                        v-model="parsed.due_time"
+                        mode="time"
+                        class="w-32"
+                        placeholder="Time"
+                    />
+                </div>
             </div>
             <div class="flex shrink-0 flex-col gap-2">
                 <button
