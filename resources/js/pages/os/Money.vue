@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { Check, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-vue-next';
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import SwipeRow from '@/components/SwipeRow.vue';
 import { formatDate, formatMmk } from '@/lib/format';
@@ -33,6 +33,50 @@ const toggle = (e: Entry) =>
     router.patch(`/ledger/${e.id}/toggle`, {}, { preserveScroll: true });
 const remove = (e: Entry) =>
     router.delete(`/ledger/${e.id}`, { preserveScroll: true });
+
+// --- Open balance summary ---
+const open = computed(() => props.entries.filter((e) => e.status === 'open'));
+const incoming = computed(() =>
+    open.value.filter((e) => e.direction === 'receivable').reduce((s, e) => s + e.amount_mmk, 0),
+);
+const toPay = computed(() =>
+    open.value.filter((e) => e.direction === 'payable').reduce((s, e) => s + e.amount_mmk, 0),
+);
+const net = computed(() => incoming.value - toPay.value);
+
+// --- Urgency grouping (dates are Y-m-d strings, safe to compare) ---
+const todayIso = new Date().toLocaleDateString('sv-SE');
+const weekIso = new Date(Date.now() + 6 * 86400000).toLocaleDateString('sv-SE');
+
+const groups = computed(() => [
+    {
+        key: 'overdue',
+        label: '🔴 Overdue',
+        items: open.value.filter((e) => e.due_date && e.due_date < todayIso),
+    },
+    {
+        key: 'week',
+        label: '📅 This week',
+        items: open.value.filter(
+            (e) => e.due_date && e.due_date >= todayIso && e.due_date <= weekIso,
+        ),
+    },
+    {
+        key: 'later',
+        label: '🗓 Later',
+        items: open.value.filter((e) => e.due_date && e.due_date > weekIso),
+    },
+    {
+        key: 'nodate',
+        label: '📝 No date',
+        items: open.value.filter((e) => !e.due_date),
+    },
+    {
+        key: 'settled',
+        label: '✓ Settled',
+        items: props.entries.filter((e) => e.status !== 'open'),
+    },
+]);
 
 function startNew(direction: string = 'payable') {
     editingId.value = null;
@@ -73,8 +117,6 @@ function saveForm() {
     else router.post('/ledger', payload, opts);
 }
 
-const section = (direction: string) =>
-    props.entries.filter((e) => e.direction === direction);
 </script>
 
 <template>
@@ -83,7 +125,7 @@ const section = (direction: string) =>
     <div class="flex items-start justify-between">
         <div>
             <h1 class="text-2xl font-bold text-gradient-brand">Money</h1>
-            <p class="mt-1 text-sm text-muted-foreground">Payables and receivables.</p>
+            <p class="mt-1 text-sm text-muted-foreground">What's due, soonest first.</p>
         </div>
         <button
             class="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-white shadow-md shadow-fuchsia-500/20 transition-transform active:scale-95"
@@ -91,6 +133,27 @@ const section = (direction: string) =>
         >
             <Plus class="h-5 w-5" />
         </button>
+    </div>
+
+    <!-- Open balance summary -->
+    <div v-if="open.length" class="mt-4 grid grid-cols-3 gap-2">
+        <div class="rounded-xl border border-border bg-card p-3 text-center">
+            <p class="text-xs text-muted-foreground">💰 Incoming</p>
+            <p class="mt-1 text-sm font-semibold">{{ incoming.toLocaleString() }}</p>
+        </div>
+        <div class="rounded-xl border border-border bg-card p-3 text-center">
+            <p class="text-xs text-muted-foreground">💸 To pay</p>
+            <p class="mt-1 text-sm font-semibold">{{ toPay.toLocaleString() }}</p>
+        </div>
+        <div class="rounded-xl border border-border bg-card p-3 text-center">
+            <p class="text-xs text-muted-foreground">Net</p>
+            <p
+                class="mt-1 text-sm font-bold"
+                :class="net >= 0 ? 'text-green-500' : 'text-red-500'"
+            >
+                {{ (net >= 0 ? '+' : '') + net.toLocaleString() }}
+            </p>
+        </div>
     </div>
 
     <!-- Create / edit form -->
@@ -173,13 +236,13 @@ const section = (direction: string) =>
         Nothing yet — tap + or type "arkar ဆီက 1 သိန်း ရစရာရှိတယ်" in the Home magic box.
     </div>
 
-    <template v-for="dir in ['payable', 'receivable']" :key="dir">
-        <section v-if="section(dir).length" class="mt-6">
+    <template v-for="group in groups" :key="group.key">
+        <section v-if="group.items.length" class="mt-6">
             <h2 class="text-sm font-medium text-muted-foreground">
-                {{ dir === 'payable' ? 'Expense' : 'Income' }}
+                {{ group.label }}
             </h2>
             <ul class="mt-2 space-y-2">
-                <li v-for="e in section(dir)" :key="e.id">
+                <li v-for="e in group.items" :key="e.id">
                     <SwipeRow @swipe-right="toggle(e)" @swipe-left="remove(e)">
                         <div
                             class="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
@@ -205,6 +268,7 @@ const section = (direction: string) =>
                                     {{ e.contact?.name ?? e.title }}
                                 </p>
                                 <p class="text-xs text-muted-foreground">
+                                    {{ e.direction === 'payable' ? '💸' : '💰' }}
                                     {{ formatMmk(e.amount_mmk) }}
                                     <span v-if="e.due_date"> · due {{ formatDate(e.due_date) }}</span>
                                     <span v-if="e.status !== 'open'"> · {{ e.status }}</span>
