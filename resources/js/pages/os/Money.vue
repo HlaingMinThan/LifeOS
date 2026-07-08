@@ -139,17 +139,21 @@ function saveForm() {
     <div v-if="open.length" class="mt-4 grid grid-cols-3 gap-2">
         <div class="rounded-xl border border-border bg-card p-3 text-center">
             <p class="text-xs text-muted-foreground">💰 Incoming</p>
-            <p class="mt-1 text-sm font-semibold">{{ incoming.toLocaleString() }}</p>
+            <p class="mt-1 text-base font-bold tabular-nums text-green-500">
+                {{ incoming.toLocaleString() }}
+            </p>
         </div>
         <div class="rounded-xl border border-border bg-card p-3 text-center">
             <p class="text-xs text-muted-foreground">💸 To pay</p>
-            <p class="mt-1 text-sm font-semibold">{{ toPay.toLocaleString() }}</p>
+            <p class="mt-1 text-base font-bold tabular-nums text-rose-400">
+                {{ toPay.toLocaleString() }}
+            </p>
         </div>
         <div class="rounded-xl border border-border bg-card p-3 text-center">
             <p class="text-xs text-muted-foreground">Net</p>
             <p
-                class="mt-1 text-sm font-bold"
-                :class="net >= 0 ? 'text-green-500' : 'text-red-500'"
+                class="mt-1 text-base font-bold tabular-nums"
+                :class="net >= 0 ? 'text-green-500' : 'text-rose-400'"
             >
                 {{ (net >= 0 ? '+' : '') + net.toLocaleString() }}
             </p>
@@ -261,15 +265,28 @@ function saveForm() {
                                 <Check v-else class="h-4 w-4" />
                             </button>
                             <div class="min-w-0 flex-1">
-                                <p
-                                    class="truncate text-sm font-medium"
-                                    :class="{ 'line-through': e.status === 'paid' }"
-                                >
-                                    {{ e.contact?.name ?? e.title }}
-                                </p>
+                                <div class="flex items-baseline justify-between gap-2">
+                                    <p
+                                        class="truncate text-sm font-medium"
+                                        :class="{ 'line-through': e.status === 'paid' }"
+                                    >
+                                        {{ e.contact?.name ?? e.title }}
+                                    </p>
+                                    <p
+                                        class="shrink-0 text-sm font-bold tabular-nums"
+                                        :class="
+                                            e.status !== 'open'
+                                                ? 'text-muted-foreground'
+                                                : e.direction === 'payable'
+                                                  ? 'text-rose-400'
+                                                  : 'text-green-500'
+                                        "
+                                    >
+                                        {{ e.amount_mmk.toLocaleString() }}
+                                    </p>
+                                </div>
                                 <p class="text-xs text-muted-foreground">
-                                    {{ e.direction === 'payable' ? '💸' : '💰' }}
-                                    {{ formatMmk(e.amount_mmk) }}
+                                    {{ e.direction === 'payable' ? '💸 to pay' : '💰 incoming' }}
                                     <span v-if="e.due_date"> · due {{ formatDate(e.due_date) }}</span>
                                     <span v-if="e.status !== 'open'"> · {{ e.status }}</span>
                                 </p>
