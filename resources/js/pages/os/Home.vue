@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { Check, Loader2, RotateCcw, Send, UserRound, X } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { apiPost } from '@/lib/api';
 import { formatDate, formatMmk, formatTime } from '@/lib/format';
 
-type LedgerEntry = {
+type Todo = {
     id: number;
     title: string;
-    amount_mmk: number;
+    bucket: string;
+    status: string;
     due_date: string | null;
-    contact?: { name: string } | null;
+    due_time: string | null;
 };
-type Todo = { id: number; title: string; bucket: string; due_date: string | null };
 type CareTask = { id: number; title: string };
 type Parsed = {
     action: string;
@@ -24,13 +24,37 @@ type Parsed = {
     confidence: number;
 };
 
-defineProps<{
-    payables: LedgerEntry[];
-    receivables: LedgerEntry[];
-    today: Todo[];
-    careToday: CareTask[];
+const props = defineProps<{
+    nextUp: Todo | null;
     overdue: Todo[];
+    todayTodos: Todo[];
+    careToday: CareTask[];
+    money: { incoming: number; toPay: number; dueThisWeek: number; overdue: number };
+    tomorrow: { todos: number; care: number };
+    parkedIdea: string | null;
 }>();
+
+const page = usePage();
+const greeting = computed(() => {
+    const hour = new Date().getHours();
+    const name = ((page.props as any).auth?.user?.name ?? '').split(' ')[0];
+    const part = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+    return `Good ${part}${name ? ', ' + name : ''}`;
+});
+const todayIso = new Date().toLocaleDateString('sv-SE');
+const tomorrowIso = new Date(Date.now() + 86400000).toLocaleDateString('sv-SE');
+const dateLabel = new Date().toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+});
+const net = computed(() => props.money.incoming - props.money.toPay);
+const allClear = computed(
+    () => !props.overdue.length && !props.todayTodos.length && !props.careToday.length,
+);
+
+const toggleTodo = (t: Todo) =>
+    router.patch(`/todos/${t.id}/toggle`, {}, { preserveScroll: true });
 
 const ACTION_LABELS: Record<string, string> = {
     mark_paid: 'Mark paid',
@@ -119,10 +143,8 @@ function dismiss() {
 
     <div class="flex items-start justify-between">
         <div>
-            <h1 class="text-2xl font-bold text-gradient-brand">Catch up</h1>
-            <p class="mt-1 text-sm text-muted-foreground">
-                Everything that needs you, on one screen.
-            </p>
+            <h1 class="text-2xl font-bold text-gradient-brand">{{ greeting }}</h1>
+            <p class="mt-1 text-sm text-muted-foreground">{{ dateLabel }}</p>
         </div>
         <div class="mt-1 flex shrink-0 items-center gap-2">
             <Link
@@ -259,59 +281,147 @@ function dismiss() {
     </Transition>
 
     <div class="mt-6 space-y-4">
-        <section class="rounded-xl border border-border bg-card p-4">
-            <h2 class="text-sm font-medium text-muted-foreground">Expense</h2>
-            <p v-if="!payables.length" class="mt-2 text-sm text-muted-foreground/70">
-                No open expenses
-            </p>
-            <ul v-else class="mt-2 divide-y divide-border">
-                <li v-for="e in payables" :key="e.id" class="flex justify-between py-2 text-sm">
-                    <span class="truncate">{{ e.contact?.name ?? e.title }}</span>
-                    <span class="ml-2 shrink-0 font-medium">{{ formatMmk(e.amount_mmk) }}</span>
-                </li>
-            </ul>
-        </section>
-
-        <section class="rounded-xl border border-border bg-card p-4">
-            <h2 class="text-sm font-medium text-muted-foreground">Income</h2>
-            <p v-if="!receivables.length" class="mt-2 text-sm text-muted-foreground/70">
-                No expected income
-            </p>
-            <ul v-else class="mt-2 divide-y divide-border">
-                <li v-for="e in receivables" :key="e.id" class="flex justify-between py-2 text-sm">
-                    <span class="truncate">{{ e.contact?.name ?? e.title }}</span>
-                    <span class="ml-2 shrink-0 font-medium">{{ formatMmk(e.amount_mmk) }}</span>
-                </li>
-            </ul>
-        </section>
-
-        <section class="rounded-xl border border-border bg-card p-4">
-            <h2 class="text-sm font-medium text-muted-foreground">Today</h2>
-            <p
-                v-if="!today.length && !careToday.length"
-                class="mt-2 text-sm text-muted-foreground/70"
+        <!-- ⚡ Next up: the next timed thing today -->
+        <section
+            v-if="nextUp"
+            class="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4"
+        >
+            <span class="text-lg">⚡</span>
+            <div class="min-w-0 flex-1">
+                <p class="text-xs font-medium uppercase tracking-wide text-primary">Next up</p>
+                <p class="mt-0.5 truncate text-sm font-medium">
+                    ⏰ {{ formatTime(nextUp.due_time) }} — {{ nextUp.title }}
+                </p>
+            </div>
+            <button
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground"
+                @click="toggleTodo(nextUp)"
             >
-                Nothing due today
-            </p>
-            <ul v-else class="mt-2 divide-y divide-border">
-                <li v-for="t in careToday" :key="`c${t.id}`" class="py-2 text-sm">
-                    💗 {{ t.title }}
+                <Check class="h-4 w-4" />
+            </button>
+        </section>
+
+        <!-- 🔴 Overdue: only when something slipped -->
+        <section
+            v-if="overdue.length"
+            class="rounded-xl border border-red-500/40 bg-red-500/5 p-4"
+        >
+            <h2 class="text-sm font-semibold text-red-500">🔴 Overdue ({{ overdue.length }})</h2>
+            <ul class="mt-2 divide-y divide-border">
+                <li v-for="t in overdue" :key="t.id" class="flex items-center gap-2 py-2 text-sm">
+                    <button
+                        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground"
+                        @click="toggleTodo(t)"
+                    >
+                        <Check class="h-3.5 w-3.5" />
+                    </button>
+                    <span class="min-w-0 flex-1 truncate">{{ t.title }}</span>
+                    <span class="shrink-0 text-xs text-red-500">{{ formatDate(t.due_date) }}</span>
                 </li>
-                <li v-for="t in today" :key="t.id" class="py-2 text-sm">{{ t.title }}</li>
             </ul>
         </section>
 
-        <section class="rounded-xl border border-border bg-card p-4">
-            <h2 class="text-sm font-medium text-muted-foreground">Overdue</h2>
-            <p v-if="!overdue.length" class="mt-2 text-sm text-muted-foreground/70">
-                Nothing overdue 🎉
-            </p>
-            <ul v-else class="mt-2 divide-y divide-border">
-                <li v-for="t in overdue" :key="t.id" class="flex justify-between py-2 text-sm">
-                    <span class="truncate">{{ t.title }}</span>
-                    <span class="ml-2 shrink-0 text-red-500">{{ formatDate(t.due_date) }}</span>
-                </li>
-            </ul>
-        </section>
+        <!-- 📌 Today -->
+        <Link :href="`/todos/day/${todayIso}`" class="block">
+            <section class="rounded-xl border border-border bg-card p-4">
+                <h2 class="flex items-center justify-between text-sm font-medium text-muted-foreground">
+                    📌 Today
+                    <span class="text-xs">day page →</span>
+                </h2>
+                <p
+                    v-if="!todayTodos.length && !careToday.length"
+                    class="mt-2 text-sm text-muted-foreground/70"
+                >
+                    Nothing due today 🎉
+                </p>
+                <ul v-else class="mt-2 divide-y divide-border">
+                    <li
+                        v-for="t in todayTodos"
+                        :key="t.id"
+                        class="flex items-center gap-2 py-2 text-sm"
+                        :class="{ 'opacity-50': t.status === 'done' }"
+                    >
+                        <button
+                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
+                            :class="
+                                t.status === 'done'
+                                    ? 'border-green-500/40 bg-green-500/10 text-green-500'
+                                    : 'border-border text-muted-foreground'
+                            "
+                            @click.prevent.stop="toggleTodo(t)"
+                        >
+                            <Check class="h-3.5 w-3.5" />
+                        </button>
+                        <span
+                            class="min-w-0 flex-1 truncate"
+                            :class="{ 'line-through': t.status === 'done' }"
+                        >
+                            {{ t.title }}
+                        </span>
+                        <span v-if="t.due_time" class="shrink-0 text-xs text-muted-foreground">
+                            {{ formatTime(t.due_time) }}
+                        </span>
+                    </li>
+                    <li v-for="t in careToday" :key="`c${t.id}`" class="py-2 text-sm">
+                        💗 {{ t.title }}
+                    </li>
+                </ul>
+            </section>
+        </Link>
+
+        <!-- 💵 Money strip -->
+        <Link href="/money" class="block">
+            <section class="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+                <div class="min-w-0">
+                    <h2 class="text-sm font-medium text-muted-foreground">💵 Money</h2>
+                    <p class="mt-1 text-sm">
+                        <span
+                            class="font-bold tabular-nums"
+                            :class="net >= 0 ? 'text-green-500' : 'text-rose-400'"
+                        >
+                            Net {{ (net >= 0 ? '+' : '') + net.toLocaleString() }}
+                        </span>
+                        <span v-if="money.dueThisWeek" class="text-muted-foreground">
+                            · {{ money.dueThisWeek }} due this week
+                        </span>
+                    </p>
+                </div>
+                <span
+                    v-if="money.overdue"
+                    class="shrink-0 rounded-full bg-red-500/15 px-2 py-1 text-xs font-semibold text-red-500"
+                >
+                    {{ money.overdue }} overdue
+                </span>
+                <span v-else class="shrink-0 text-xs text-muted-foreground">→</span>
+            </section>
+        </Link>
+
+        <!-- 🌙 Tomorrow peek -->
+        <Link
+            v-if="tomorrow.todos || tomorrow.care"
+            :href="`/todos/day/${tomorrowIso}`"
+            class="block"
+        >
+            <section class="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+                <p class="text-sm text-muted-foreground">
+                    🌙 Tomorrow:
+                    <span v-if="tomorrow.todos" class="text-foreground">{{ tomorrow.todos }} todo{{ tomorrow.todos > 1 ? 's' : '' }}</span>
+                    <span v-if="tomorrow.todos && tomorrow.care"> · </span>
+                    <span v-if="tomorrow.care" class="text-foreground">💗 {{ tomorrow.care }} care</span>
+                </p>
+                <span class="text-xs text-muted-foreground">→</span>
+            </section>
+        </Link>
+
+        <!-- 💡 Parked idea of the week -->
+        <Link v-if="parkedIdea" href="/ideas" class="block">
+            <section class="rounded-xl border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+                💡 Still parked: <span class="text-foreground">{{ parkedIdea }}</span>
+            </section>
+        </Link>
+
+        <p v-if="allClear" class="pt-2 text-center text-sm text-muted-foreground">
+            All clear — nothing needs you right now 🎉
+        </p>
     </div>
 </template>
