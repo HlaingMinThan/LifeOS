@@ -14,6 +14,8 @@ class TodoReminderTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Mid-day, so "+1 hour" / "-1 minute" never cross midnight.
+        $this->travelTo(now()->setTime(12, 0));
         config(['lifeos.telegram.token' => 'test-token', 'lifeos.telegram.chat_id' => '12345']);
         Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
     }

@@ -20,6 +20,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/ledger/{entry}', [LedgerController::class, 'destroy'])->name('ledger.destroy');
 
     Route::get('/todos', [TodoController::class, 'index'])->name('todos');
+    Route::get('/todos/day/{date}', [TodoController::class, 'day'])->name('todos.day');
     Route::post('/todos', [TodoController::class, 'store'])->name('todos.store');
     Route::patch('/todos/{todo}/toggle', [TodoController::class, 'toggle'])->name('todos.toggle');
     Route::patch('/todos/{todo}', [TodoController::class, 'update'])->name('todos.update');

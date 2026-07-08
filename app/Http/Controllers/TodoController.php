@@ -10,14 +10,42 @@ use Inertia\Response;
 
 class TodoController extends Controller
 {
-    public function index(): Response
+    /** Month calendar: per-day open/done counts + the undated bucket. */
+    public function index(Request $request): Response
     {
+        $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->query('month'))
+            ? $request->query('month')
+            : now()->format('Y-m');
+        $start = now()->parse($month.'-01');
+
+        $counts = Todo::whereBetween('due_date', [
+            $start->toDateString(), $start->endOfMonth()->toDateString(),
+        ])->get(['due_date', 'status'])
+            ->groupBy(fn ($todo) => $todo->due_date->toDateString())
+            ->map(fn ($group) => [
+                'open' => $group->where('status', 'open')->count(),
+                'done' => $group->where('status', 'done')->count(),
+            ]);
+
         return Inertia::render('os/Todos', [
-            'todos' => Todo::orderByRaw("status = 'open' desc")
-                ->orderByRaw('due_date is null')
-                ->orderBy('due_date')
-                ->latest()
-                ->get(),
+            'month' => $start->format('Y-m'),
+            'counts' => $counts,
+            'undatedCount' => Todo::open()->whereNull('due_date')->count(),
+        ]);
+    }
+
+    /** One day's todos ("undated" is the dateless bucket). */
+    public function day(string $date): Response
+    {
+        $todos = Todo::orderByRaw("status = 'open' desc")->latest();
+
+        $todos = $date === 'undated'
+            ? $todos->whereNull('due_date')
+            : $todos->whereDate('due_date', now()->parse($date)->toDateString());
+
+        return Inertia::render('os/TodoDay', [
+            'date' => $date,
+            'todos' => $todos->get(),
         ]);
     }
 
