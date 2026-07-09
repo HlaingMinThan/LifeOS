@@ -32,9 +32,12 @@ class DigestBuilder
             $lines[] = '';
             $lines[] = '🔴 Overdue:';
             array_push($lines, ...$this->groupedTodoLines(
-                $overdue,
+                $overdue->take(10),
                 fn ($todo) => "• {$todo->title} (due {$todo->due_date->format('j M')})",
             ));
+            if ($overdue->count() > 10) {
+                $lines[] = '  … and '.($overdue->count() - 10).' more in the app';
+            }
         }
 
         $today = Todo::open()->whereDate('due_date', today())->get();
@@ -64,18 +67,14 @@ class DigestBuilder
         if ($payables->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '💸 Expense ('.number_format($payables->sum('amount_mmk')).' Ks):';
-            foreach ($payables as $entry) {
-                $lines[] = '  • '.($entry->contact?->name ?? $entry->title).' — '.number_format($entry->amount_mmk).' Ks';
-            }
+            array_push($lines, ...$this->moneyLines($payables));
         }
 
         $receivables = $relevantToday(LedgerEntry::open()->receivable())->with('contact')->get();
         if ($receivables->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '💰 Income ('.number_format($receivables->sum('amount_mmk')).' Ks):';
-            foreach ($receivables as $entry) {
-                $lines[] = '  • '.($entry->contact?->name ?? $entry->title).' — '.number_format($entry->amount_mmk).' Ks';
-            }
+            array_push($lines, ...$this->moneyLines($receivables));
         }
 
         if (count($lines) === 1) {
@@ -128,6 +127,20 @@ class DigestBuilder
         }
 
         return implode("\n", $lines);
+    }
+
+    /** Entry lines capped at 8 — totals in the header already tell the story. */
+    private function moneyLines($entries): array
+    {
+        $lines = [];
+        foreach ($entries->take(8) as $entry) {
+            $lines[] = '  • '.($entry->contact?->name ?? $entry->title).' — '.number_format($entry->amount_mmk).' Ks';
+        }
+        if ($entries->count() > 8) {
+            $lines[] = '  … and '.($entries->count() - 8).' more in the app';
+        }
+
+        return $lines;
     }
 
     /** Todos grouped by bucket (Work / Personal / Money), skipping empty groups. */

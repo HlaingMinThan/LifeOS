@@ -10,13 +10,23 @@ use Inertia\Response;
 
 class LedgerController extends Controller
 {
-    public function index(): Response
+    /**
+     * Open entries are bounded by real life; settled history is not —
+     * it loads the recent slice unless "show all" is requested.
+     */
+    public function index(Request $request): Response
     {
+        $settledQuery = LedgerEntry::where('status', '!=', 'open')
+            ->with('contact')->latest('updated_at');
+        $settledCount = (clone $settledQuery)->count();
+
         return Inertia::render('os/Money', [
-            'entries' => LedgerEntry::with('contact')
-                ->orderByRaw("status = 'open' desc")
-                ->latest()
-                ->get(),
+            'open' => LedgerEntry::open()->with('contact')
+                ->orderByRaw('due_date is null')->orderBy('due_date')->get(),
+            'settled' => $request->boolean('all_settled')
+                ? $settledQuery->get()
+                : $settledQuery->take(15)->get(),
+            'settledCount' => $settledCount,
         ]);
     }
 

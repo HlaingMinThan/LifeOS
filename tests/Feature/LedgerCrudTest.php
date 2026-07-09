@@ -19,6 +19,21 @@ class LedgerCrudTest extends TestCase
         $this->user = User::factory()->create();
     }
 
+    public function test_money_page_caps_settled_history(): void
+    {
+        LedgerEntry::factory()->create(); // open
+        LedgerEntry::factory()->paid()->count(20)->create();
+
+        $this->actingAs($this->user)->get('/money')
+            ->assertInertia(fn ($page) => $page
+                ->has('open', 1)
+                ->has('settled', 15)
+                ->where('settledCount', 20));
+
+        $this->actingAs($this->user)->get('/money?all_settled=1')
+            ->assertInertia(fn ($page) => $page->has('settled', 20));
+    }
+
     public function test_entry_can_be_created_from_money_page(): void
     {
         $this->actingAs($this->user)->post('/ledger', [

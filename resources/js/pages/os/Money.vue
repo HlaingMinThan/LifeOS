@@ -17,7 +17,11 @@ type Entry = {
     contact?: { name: string } | null;
 };
 
-const props = defineProps<{ entries: Entry[] }>();
+const props = defineProps<{
+    open: Entry[];
+    settled: Entry[];
+    settledCount: number;
+}>();
 
 const editingId = ref<number | null>(null);
 const showNewForm = ref(false);
@@ -35,7 +39,7 @@ const remove = (e: Entry) =>
     router.delete(`/ledger/${e.id}`, { preserveScroll: true });
 
 // --- Open balance summary ---
-const open = computed(() => props.entries.filter((e) => e.status === 'open'));
+const open = computed(() => props.open);
 const incoming = computed(() =>
     open.value.filter((e) => e.direction === 'receivable').reduce((s, e) => s + e.amount_mmk, 0),
 );
@@ -74,9 +78,12 @@ const groups = computed(() => [
     {
         key: 'settled',
         label: '✓ Settled',
-        items: props.entries.filter((e) => e.status !== 'open'),
+        items: props.settled,
     },
 ]);
+
+const showAllSettled = () =>
+    router.get('/money', { all_settled: 1 }, { preserveScroll: true });
 
 function startNew(direction: string = 'payable') {
     editingId.value = null;
@@ -234,7 +241,7 @@ function saveForm() {
     </Transition>
 
     <div
-        v-if="!entries.length && !showNewForm"
+        v-if="!open.length && !settledCount && !showNewForm"
         class="mt-6 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground"
     >
         Nothing yet — tap + or type "arkar ဆီက 1 သိန်း ရစရာရှိတယ်" in the Home magic box.
@@ -304,6 +311,13 @@ function saveForm() {
                     </SwipeRow>
                 </li>
             </ul>
+            <button
+                v-if="group.key === 'settled' && settledCount > settled.length"
+                class="mt-2 w-full rounded-xl border border-dashed border-border py-2 text-xs text-muted-foreground"
+                @click="showAllSettled"
+            >
+                Show all {{ settledCount }} settled entries
+            </button>
         </section>
     </template>
 </template>
