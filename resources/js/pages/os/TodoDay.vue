@@ -24,6 +24,29 @@ const BUCKETS: Record<string, string> = {
     money_task: 'Money',
 };
 
+// Timeline order: timed (by time) → anytime → done. The left gutter shows
+// each todo's own time, like a day view in other task apps.
+const orderedTodos = computed(() => {
+    const rank = (t: Todo) => (t.status === 'done' ? 2 : t.due_time ? 0 : 1);
+    return [...props.todos].sort((a, b) => {
+        const diff = rank(a) - rank(b);
+        if (diff !== 0) return diff;
+        return (a.due_time ?? '99:99').localeCompare(b.due_time ?? '99:99');
+    });
+});
+
+const groupOf = (t?: Todo) =>
+    !t ? '' : t.status === 'done' ? 'done' : t.due_time ? 'timed' : 'anytime';
+
+/** Section label when the group changes (Anytime / Done); null otherwise. */
+function sectionBreak(index: number): string | null {
+    const g = groupOf(orderedTodos.value[index]);
+    if (g === groupOf(orderedTodos.value[index - 1])) return null;
+    if (g === 'anytime') return 'Anytime';
+    if (g === 'done') return 'Done';
+    return null;
+}
+
 const isUndated = computed(() => props.date === 'undated');
 const heading = computed(() =>
     isUndated.value
@@ -83,8 +106,6 @@ function saveForm() {
     if (editingId.value) router.patch(`/todos/${editingId.value}`, payload, opts);
     else router.post('/todos', payload, opts);
 }
-
-const inBucket = (bucket: string) => props.todos.filter((t) => t.bucket === bucket);
 
 // The calendar's + button lands here with ?new=1 — open the form directly.
 onMounted(() => {
@@ -170,58 +191,71 @@ onMounted(() => {
         Nothing here — tap + to add one for this day.
     </div>
 
-    <template v-for="(label, bucket) in BUCKETS" :key="bucket">
-        <section v-if="inBucket(bucket).length" class="mt-6">
-            <h2 class="text-sm font-medium text-muted-foreground">{{ label }}</h2>
-            <ul class="mt-2 space-y-2">
-                <li v-for="t in inBucket(bucket)" :key="t.id">
-                    <!-- Edit mode -->
-                    <div
-                        v-if="editingId === t.id"
-                        class="space-y-2 rounded-xl border border-primary/40 bg-card p-3"
-                    >
-                        <input
-                            v-model="form.title"
-                            type="text"
-                            class="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                        />
-                        <textarea
-                            v-model="form.note"
-                            rows="2"
-                            placeholder="Details…"
-                            class="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                        ></textarea>
-                        <div class="flex gap-2">
-                            <DateTimeField v-model="form.due_date" mode="date" class="flex-1" placeholder="Due date" />
-                            <DateTimeField v-model="form.due_time" mode="time" class="w-32" placeholder="Time" />
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <select
-                                v-model="form.bucket"
-                                class="flex-1 rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none"
-                            >
-                                <option value="work">Work</option>
-                                <option value="personal">Personal</option>
-                                <option value="money_task">Money</option>
-                            </select>
-                            <button
-                                class="rounded-lg bg-gradient-brand px-4 py-1.5 text-sm text-white disabled:opacity-50"
-                                :disabled="!form.title.trim()"
-                                @click="saveForm"
-                            >
-                                Save
-                            </button>
-                            <button
-                                class="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground"
-                                @click="closeForm"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
+    <ul v-if="todos.length" class="mt-6">
+        <template v-for="(t, i) in orderedTodos" :key="t.id">
+            <!-- Section break: Anytime / Done -->
+            <li
+                v-if="sectionBreak(i)"
+                class="mb-2 mt-4 pl-16 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            >
+                {{ sectionBreak(i) }}
+            </li>
 
-                    <!-- Display mode -->
-                    <SwipeRow v-else @swipe-right="toggle(t)" @swipe-left="remove(t)">
+            <li class="pb-2">
+                <!-- Edit mode -->
+                <div
+                    v-if="editingId === t.id"
+                    class="space-y-2 rounded-xl border border-primary/40 bg-card p-3"
+                >
+                    <input
+                        v-model="form.title"
+                        type="text"
+                        class="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <textarea
+                        v-model="form.note"
+                        rows="2"
+                        placeholder="Details…"
+                        class="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    ></textarea>
+                    <div class="flex gap-2">
+                        <DateTimeField v-model="form.due_date" mode="date" class="flex-1" placeholder="Due date" />
+                        <DateTimeField v-model="form.due_time" mode="time" class="w-32" placeholder="Time" />
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <select
+                            v-model="form.bucket"
+                            class="flex-1 rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none"
+                        >
+                            <option value="work">Work</option>
+                            <option value="personal">Personal</option>
+                            <option value="money_task">Money</option>
+                        </select>
+                        <button
+                            class="rounded-lg bg-gradient-brand px-4 py-1.5 text-sm text-white disabled:opacity-50"
+                            :disabled="!form.title.trim()"
+                            @click="saveForm"
+                        >
+                            Save
+                        </button>
+                        <button
+                            class="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground"
+                            @click="closeForm"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Display mode: time gutter + swipeable card -->
+                <div v-else class="flex items-stretch gap-2">
+                    <div
+                        class="flex w-14 shrink-0 items-center justify-end pr-1 text-right text-xs font-semibold tabular-nums"
+                        :class="t.due_time ? 'text-primary' : 'text-muted-foreground/40'"
+                    >
+                        {{ t.due_time ? formatTime(t.due_time) : '—' }}
+                    </div>
+                    <SwipeRow class="flex-1" @swipe-right="toggle(t)" @swipe-left="remove(t)">
                         <div
                             class="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
                             :class="{ 'opacity-50': t.status === 'done' }"
@@ -247,9 +281,11 @@ onMounted(() => {
                                 <p v-if="t.note" class="truncate text-xs text-muted-foreground">
                                     {{ t.note }}
                                 </p>
-                                <p v-if="t.due_time" class="text-xs text-muted-foreground">
-                                    ⏰ {{ formatTime(t.due_time) }}
-                                </p>
+                                <span
+                                    class="mt-0.5 inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                                >
+                                    {{ BUCKETS[t.bucket] }}
+                                </span>
                             </div>
                             <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(t)">
                                 <Pencil class="h-4 w-4" />
@@ -259,8 +295,8 @@ onMounted(() => {
                             </button>
                         </div>
                     </SwipeRow>
-                </li>
-            </ul>
-        </section>
-    </template>
+                </div>
+            </li>
+        </template>
+    </ul>
 </template>
