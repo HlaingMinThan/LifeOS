@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\InboxEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -40,5 +41,21 @@ class TelegramListenTest extends TestCase
 
         // Two deliveries of update_id 900, but exactly one applied action.
         $this->assertSame(1, InboxEvent::where('applied', true)->count());
+    }
+
+    public function test_second_long_running_instance_exits_immediately(): void
+    {
+        Http::fake();
+        // A live ownership heartbeat means one listener is already running.
+        Cache::add('telegram:listen:owner', 'other-instance', 120);
+
+        // The new (long-running, no --once) listener must bail before polling
+        // instead of running a second forever-loop alongside the first.
+        $this->artisan('telegram:listen')
+            ->expectsOutputToContain('already running')
+            ->assertSuccessful();
+
+        // It never touched Telegram.
+        Http::assertNothingSent();
     }
 }
