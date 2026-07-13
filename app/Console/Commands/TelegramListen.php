@@ -44,6 +44,13 @@ class TelegramListen extends Command
                     continue;
                 }
 
+                // Idempotency: handle each update_id exactly once. Cache::add is
+                // atomic, so even if a second listener is running or Telegram
+                // redelivers, only the first caller proceeds — no double replies.
+                if (! Cache::add('telegram:seen:'.$update['update_id'], true, now()->addHour())) {
+                    continue;
+                }
+
                 try {
                     $reply = $bridge->handle($update['message']);
                 } catch (Throwable $e) {
