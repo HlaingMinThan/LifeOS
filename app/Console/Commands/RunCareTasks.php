@@ -14,12 +14,15 @@ class RunCareTasks extends Command
 
     public function handle(TelegramClient $telegram): int
     {
-        $due = CareTask::where('active', true)
+        // Still one query across everyone: each task carries its owner, so
+        // the notification just follows $task->user to the right bot.
+        $due = CareTask::with('user')
+            ->where('active', true)
             ->where('next_run_at', '<=', now())
             ->get();
 
         foreach ($due as $task) {
-            $telegram->send("💗 {$task->title}");
+            $telegram->forUser($task->user)->send("💗 {$task->title}");
 
             $task->logs()->create(['ran_at' => now(), 'status' => 'done']);
 

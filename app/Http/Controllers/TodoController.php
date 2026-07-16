@@ -18,7 +18,7 @@ class TodoController extends Controller
             : now()->format('Y-m');
         $start = now()->parse($month.'-01');
 
-        $counts = Todo::whereBetween('due_date', [
+        $counts = $request->user()->todos()->whereBetween('due_date', [
             $start->toDateString(), $start->endOfMonth()->toDateString(),
         ])->get(['due_date', 'status'])
             ->groupBy(fn ($todo) => $todo->due_date->toDateString())
@@ -30,14 +30,14 @@ class TodoController extends Controller
         return Inertia::render('os/Todos', [
             'month' => $start->format('Y-m'),
             'counts' => $counts,
-            'undatedCount' => Todo::open()->whereNull('due_date')->count(),
+            'undatedCount' => $request->user()->todos()->open()->whereNull('due_date')->count(),
         ]);
     }
 
     /** One day's todos. "undated" = dateless bucket, "overdue" = all past-due open. */
-    public function day(string $date): Response
+    public function day(Request $request, string $date): Response
     {
-        $todos = Todo::latest();
+        $todos = $request->user()->todos()->latest();
 
         $todos = match ($date) {
             'undated' => $todos->orderByRaw("status = 'open' desc")->whereNull('due_date'),
@@ -53,38 +53,39 @@ class TodoController extends Controller
     }
 
     /** Full detail page with the rich-text description editor. */
-    public function show(Todo $todo): Response
+    public function show(Request $request, int $todo): Response
     {
-        return Inertia::render('os/TodoDetail', ['todo' => $todo]);
+        return Inertia::render('os/TodoDetail', ['todo' => $this->find($request, $todo)]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $this->validated($request);
-        Todo::create($data);
+        $request->user()->todos()->create($this->validated($request));
 
         return back();
     }
 
-    public function update(Request $request, Todo $todo): RedirectResponse
+    public function update(Request $request, int $todo): RedirectResponse
     {
+        $model = $this->find($request, $todo);
         $validated = $this->validated($request);
 
         // Rescheduling re-arms the reminder.
-        if ($todo->due_date?->toDateString() !== ($validated['due_date'] ?? null)
-            || substr($todo->due_time ?? '', 0, 5) !== ($validated['due_time'] ?? null)) {
+        if ($model->due_date?->toDateString() !== ($validated['due_date'] ?? null)
+            || substr($model->due_time ?? '', 0, 5) !== ($validated['due_time'] ?? null)) {
             $validated['reminded_at'] = null;
         }
 
-        $todo->update($validated);
+        $model->update($validated);
 
         return back();
     }
 
-    public function toggle(Todo $todo): RedirectResponse
+    public function toggle(Request $request, int $todo): RedirectResponse
     {
-        $done = $todo->status === 'open';
-        $todo->update($done
+        $model = $this->find($request, $todo);
+        $done = $model->status === 'open';
+        $model->update($done
             ? ['status' => 'done', 'done_at' => now(), 'focused' => false]
             : ['status' => 'open', 'done_at' => null]);
 
@@ -92,23 +93,32 @@ class TodoController extends Controller
     }
 
     /** Pin one todo as the single focus (or clear it). */
-    public function focus(Todo $todo): RedirectResponse
+    public function focus(Request $request, int $todo): RedirectResponse
     {
-        if ($todo->focused) {
-            $todo->update(['focused' => false]);
+        $model = $this->find($request, $todo);
+
+        if ($model->focused) {
+            $model->update(['focused' => false]);
         } else {
-            Todo::where('focused', true)->update(['focused' => false]);
-            $todo->update(['focused' => true]);
+            // Scoped: clearing focus must not touch anyone else's pinned todo.
+            $request->user()->todos()->where('focused', true)->update(['focused' => false]);
+            $model->update(['focused' => true]);
         }
 
         return back();
     }
 
-    public function destroy(Todo $todo): RedirectResponse
+    public function destroy(Request $request, int $todo): RedirectResponse
     {
-        $todo->delete();
+        $this->find($request, $todo)->delete();
 
         return back();
+    }
+
+    /** Resolve through the owner, so another user's id is a 404, not a leak. */
+    private function find(Request $request, int $id): Todo
+    {
+        return $request->user()->todos()->findOrFail($id);
     }
 
     private function validated(Request $request): array

@@ -2,6 +2,7 @@
 
 namespace App\Services\Inbox;
 
+use App\Models\User;
 use Throwable;
 
 /**
@@ -14,11 +15,11 @@ class BrainDumpParser
 {
     public function __construct(private ParserContract $parser) {}
 
-    public function parse(string $text): array
+    public function parse(string $text, User $user): array
     {
         if ($this->parser instanceof ClaudeParser) {
             try {
-                return $this->parser->parseMany($text);
+                return $this->parser->parseMany($text, $user);
             } catch (Throwable $e) {
                 report($e); // fall through to line-by-line
             }
@@ -28,9 +29,9 @@ class BrainDumpParser
             ->map(fn ($line) => trim(preg_replace('/^[-–—⁃•*၊။]+\s*/u', '', trim($line))))
             ->filter()
             ->values()
-            ->map(function (string $line) {
+            ->map(function (string $line) use ($user) {
                 try {
-                    $parsed = $this->parser->parse($line);
+                    $parsed = $this->parser->parse($line, $user);
                 } catch (Throwable) {
                     $parsed = [
                         'action' => 'unknown', 'target' => $line, 'amount_mmk' => null,

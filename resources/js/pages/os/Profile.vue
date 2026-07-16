@@ -5,6 +5,7 @@ import {
     Download,
     LogOut,
     Palette,
+    Send,
     ShieldCheck,
     UserPen,
 } from 'lucide-vue-next';
@@ -25,6 +26,7 @@ const initials = computed(() =>
 
 const menu = [
     { href: '/settings/profile', label: 'Edit profile', description: 'Name and email', icon: UserPen },
+    { href: '/settings/telegram', label: 'Telegram', description: 'Use Life OS from your phone', icon: Send },
     { href: '/settings/security', label: 'Security', description: 'Password and two-factor', icon: ShieldCheck },
     { href: '/settings/appearance', label: 'Appearance', description: 'Light / dark mode', icon: Palette },
     { href: '/onboard', label: 'Import data', description: 'Brain-dump onboarding', icon: Download },

@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
+use App\Concerns\BelongsToUser;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CareTask extends Model
 {
-    use HasFactory, SoftDeletes;
+    use BelongsToUser, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'title', 'schedule_type', 'time_of_day', 'weekday',

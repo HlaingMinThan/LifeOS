@@ -49,7 +49,7 @@ class CareCrudTest extends TestCase
 
     public function test_update_recomputes_next_run(): void
     {
-        $task = CareTask::factory()->create([
+        $task = CareTask::factory()->for($this->user)->create([
             'schedule_type' => 'daily',
             'next_run_at' => now()->addDay(),
         ]);
@@ -71,7 +71,7 @@ class CareCrudTest extends TestCase
 
     public function test_pause_and_delete(): void
     {
-        $task = CareTask::factory()->create(['active' => true]);
+        $task = CareTask::factory()->for($this->user)->create(['active' => true]);
 
         $this->actingAs($this->user)->patch("/care/{$task->id}/toggle")->assertRedirect();
         $this->assertFalse($task->fresh()->active);
@@ -98,7 +98,7 @@ class CareCrudTest extends TestCase
 
     public function test_todo_can_be_edited_with_note_and_time(): void
     {
-        $todo = Todo::factory()->create(['title' => 'old title']);
+        $todo = Todo::factory()->for($this->user)->create(['title' => 'old title']);
 
         $this->actingAs($this->user)->patch("/todos/{$todo->id}", [
             'title' => 'new title',

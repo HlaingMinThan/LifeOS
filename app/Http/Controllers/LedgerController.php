@@ -16,12 +16,12 @@ class LedgerController extends Controller
      */
     public function index(Request $request): Response
     {
-        $settledQuery = LedgerEntry::where('status', '!=', 'open')
+        $settledQuery = $request->user()->ledgerEntries()->where('status', '!=', 'open')
             ->with('contact')->latest('updated_at');
         $settledCount = (clone $settledQuery)->count();
 
         return Inertia::render('os/Money', [
-            'open' => LedgerEntry::open()->with('contact')
+            'open' => $request->user()->ledgerEntries()->open()->with('contact')
                 ->orderByRaw('due_date is null')->orderBy('due_date')->get(),
             'settled' => $request->boolean('all_settled')
                 ? $settledQuery->get()
@@ -32,32 +32,40 @@ class LedgerController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        LedgerEntry::create($this->validated($request) + ['status' => 'open']);
+        $request->user()->ledgerEntries()->create($this->validated($request) + ['status' => 'open']);
 
         return back();
     }
 
-    public function update(Request $request, LedgerEntry $entry): RedirectResponse
+    public function update(Request $request, int $entry): RedirectResponse
     {
-        $entry->update($this->validated($request));
+        $this->find($request, $entry)->update($this->validated($request));
 
         return back();
     }
 
-    public function toggle(LedgerEntry $entry): RedirectResponse
+    public function toggle(Request $request, int $entry): RedirectResponse
     {
-        $entry->update($entry->status === 'open'
+        $model = $this->find($request, $entry);
+
+        $model->update($model->status === 'open'
             ? ['status' => 'paid', 'paid_at' => now()]
             : ['status' => 'open', 'paid_at' => null]);
 
         return back();
     }
 
-    public function destroy(LedgerEntry $entry): RedirectResponse
+    public function destroy(Request $request, int $entry): RedirectResponse
     {
-        $entry->delete();
+        $this->find($request, $entry)->delete();
 
         return back();
+    }
+
+    /** Resolve through the owner, so another user's id is a 404, not a leak. */
+    private function find(Request $request, int $id): LedgerEntry
+    {
+        return $request->user()->ledgerEntries()->findOrFail($id);
     }
 
     private function validated(Request $request): array

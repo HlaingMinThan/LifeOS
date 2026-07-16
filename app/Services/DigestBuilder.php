@@ -2,9 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\CareTask;
-use App\Models\LedgerEntry;
-use App\Models\Todo;
+use App\Models\User;
+use Carbon\CarbonInterface;
 
 /**
  * The catch-up screen as text — sent as the 7 AM Telegram digest
@@ -13,11 +12,11 @@ use App\Models\Todo;
  */
 class DigestBuilder
 {
-    public function build(): string
+    public function build(User $user): string
     {
         $lines = ['🌅 '.now()->format('D, j M Y')];
 
-        $care = CareTask::where('active', true)
+        $care = $user->careTasks()->where('active', true)
             ->whereDate('next_run_at', '<=', today())->get();
         if ($care->isNotEmpty()) {
             $lines[] = '';
@@ -27,7 +26,7 @@ class DigestBuilder
             }
         }
 
-        $overdue = Todo::overdue()->orderBy('due_date')->get();
+        $overdue = $user->todos()->overdue()->orderBy('due_date')->get();
         if ($overdue->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '🔴 Overdue:';
@@ -40,7 +39,7 @@ class DigestBuilder
             }
         }
 
-        $today = Todo::open()->whereDate('due_date', today())->get();
+        $today = $user->todos()->open()->whereDate('due_date', today())->get();
         if ($today->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '📌 Due today:';
@@ -48,7 +47,7 @@ class DigestBuilder
         }
 
         // Undated todos would otherwise be invisible to every digest.
-        $undated = Todo::open()->whereNull('due_date')->latest()->get();
+        $undated = $user->todos()->open()->whereNull('due_date')->latest()->get();
         if ($undated->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '📝 Open (no date):';
@@ -63,14 +62,14 @@ class DigestBuilder
             fn ($q) => $q->whereNull('due_date')->orWhereDate('due_date', '<=', today()),
         );
 
-        $payables = $relevantToday(LedgerEntry::open()->payable())->with('contact')->get();
+        $payables = $relevantToday($user->ledgerEntries()->open()->payable())->with('contact')->get();
         if ($payables->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '💸 Expense ('.number_format($payables->sum('amount_mmk')).' Ks):';
             array_push($lines, ...$this->moneyLines($payables));
         }
 
-        $receivables = $relevantToday(LedgerEntry::open()->receivable())->with('contact')->get();
+        $receivables = $relevantToday($user->ledgerEntries()->open()->receivable())->with('contact')->get();
         if ($receivables->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '💰 Income ('.number_format($receivables->sum('amount_mmk')).' Ks):';
@@ -86,11 +85,11 @@ class DigestBuilder
     }
 
     /** Any single day: its todos (open ⭕ / done ✅) + care tasks landing then. */
-    public function forDate(\Carbon\CarbonInterface $date): string
+    public function forDate(User $user, CarbonInterface $date): string
     {
         $lines = ['🗓 '.$date->format('D, j M Y')];
 
-        $care = CareTask::where('active', true)
+        $care = $user->careTasks()->where('active', true)
             ->whereDate('next_run_at', $date)->get();
         if ($care->isNotEmpty()) {
             $lines[] = '';
@@ -100,7 +99,7 @@ class DigestBuilder
             }
         }
 
-        $todos = Todo::whereDate('due_date', $date)->get();
+        $todos = $user->todos()->whereDate('due_date', $date)->get();
         if ($todos->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '📌 Todos:';
@@ -110,7 +109,7 @@ class DigestBuilder
             ));
         }
 
-        $money = LedgerEntry::open()->whereDate('due_date', $date)->with('contact')->get();
+        $money = $user->ledgerEntries()->open()->whereDate('due_date', $date)->with('contact')->get();
         if ($money->isNotEmpty()) {
             $lines[] = '';
             $lines[] = '💵 Money due:';

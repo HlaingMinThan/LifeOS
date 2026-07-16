@@ -22,10 +22,10 @@ class TodoCalendarTest extends TestCase
 
     public function test_calendar_shows_per_day_counts_and_undated(): void
     {
-        Todo::factory()->create(['due_date' => '2026-07-08']);
-        Todo::factory()->done()->create(['due_date' => '2026-07-08']);
-        Todo::factory()->create(['due_date' => '2026-08-01']); // other month
-        Todo::factory()->create(); // undated
+        Todo::factory()->for($this->user)->create(['due_date' => '2026-07-08']);
+        Todo::factory()->for($this->user)->done()->create(['due_date' => '2026-07-08']);
+        Todo::factory()->for($this->user)->create(['due_date' => '2026-08-01']); // other month
+        Todo::factory()->for($this->user)->create(); // undated
 
         $this->actingAs($this->user)
             ->get('/todos?month=2026-07')
@@ -41,8 +41,8 @@ class TodoCalendarTest extends TestCase
 
     public function test_day_page_lists_only_that_day(): void
     {
-        Todo::factory()->create(['title' => 'right day', 'due_date' => '2026-07-08']);
-        Todo::factory()->create(['title' => 'wrong day', 'due_date' => '2026-07-09']);
+        Todo::factory()->for($this->user)->create(['title' => 'right day', 'due_date' => '2026-07-08']);
+        Todo::factory()->for($this->user)->create(['title' => 'wrong day', 'due_date' => '2026-07-09']);
 
         $this->actingAs($this->user)
             ->get('/todos/day/2026-07-08')
@@ -56,8 +56,8 @@ class TodoCalendarTest extends TestCase
 
     public function test_undated_day_page(): void
     {
-        Todo::factory()->create(['title' => 'floating task']);
-        Todo::factory()->create(['title' => 'dated task', 'due_date' => '2026-07-08']);
+        Todo::factory()->for($this->user)->create(['title' => 'floating task']);
+        Todo::factory()->for($this->user)->create(['title' => 'dated task', 'due_date' => '2026-07-08']);
 
         $this->actingAs($this->user)
             ->get('/todos/day/undated')
@@ -70,10 +70,10 @@ class TodoCalendarTest extends TestCase
 
     public function test_overdue_day_view_lists_all_past_due_open_todos(): void
     {
-        Todo::factory()->create(['title' => 'late one', 'due_date' => today()->subDays(3)]);
-        Todo::factory()->create(['title' => 'late two', 'due_date' => today()->subDay()]);
-        Todo::factory()->done()->create(['title' => 'late but done', 'due_date' => today()->subDay()]);
-        Todo::factory()->create(['title' => 'future', 'due_date' => today()->addDay()]);
+        Todo::factory()->for($this->user)->create(['title' => 'late one', 'due_date' => today()->subDays(3)]);
+        Todo::factory()->for($this->user)->create(['title' => 'late two', 'due_date' => today()->subDay()]);
+        Todo::factory()->for($this->user)->done()->create(['title' => 'late but done', 'due_date' => today()->subDay()]);
+        Todo::factory()->for($this->user)->create(['title' => 'future', 'due_date' => today()->addDay()]);
 
         $this->actingAs($this->user)
             ->get('/todos/day/overdue')

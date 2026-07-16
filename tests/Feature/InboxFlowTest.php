@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Contact;
 use App\Models\InboxEvent;
 use App\Models\LedgerEntry;
+use App\Models\ParserExample;
 use App\Models\Todo;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,8 +26,8 @@ class InboxFlowTest extends TestCase
 
     public function test_parse_endpoint_returns_action_without_writing(): void
     {
-        $contact = Contact::factory()->create(['name' => 'Gon Khaung', 'aliases' => ['ဂွန်ခေါင်']]);
-        LedgerEntry::factory()->create([
+        $contact = Contact::factory()->for($this->user)->create(['name' => 'Gon Khaung', 'aliases' => ['ဂွန်ခေါင်']]);
+        LedgerEntry::factory()->for($this->user)->create([
             'contact_id' => $contact->id, 'direction' => 'payable', 'title' => 'Gon Khaung loan',
         ]);
 
@@ -42,7 +43,7 @@ class InboxFlowTest extends TestCase
 
     public function test_burmese_mark_paid_parse(): void
     {
-        Contact::factory()->create(['name' => 'Gon Khaung', 'aliases' => ['ဂွန်ခေါင်']]);
+        Contact::factory()->for($this->user)->create(['name' => 'Gon Khaung', 'aliases' => ['ဂွန်ခေါင်']]);
 
         $this->actingAs($this->user)
             ->postJson('/inbox/parse', ['text' => 'ဂွန်ခေါင်ကို ၅ သိန်း ပေးပြီးပြီ'])
@@ -54,8 +55,8 @@ class InboxFlowTest extends TestCase
 
     public function test_apply_mark_paid_then_undo_reopens(): void
     {
-        $contact = Contact::factory()->create(['name' => 'Gon Khaung']);
-        $entry = LedgerEntry::factory()->create([
+        $contact = Contact::factory()->for($this->user)->create(['name' => 'Gon Khaung']);
+        $entry = LedgerEntry::factory()->for($this->user)->create([
             'contact_id' => $contact->id, 'direction' => 'payable',
             'title' => 'Gon Khaung loan', 'status' => 'open',
         ]);
@@ -93,7 +94,7 @@ class InboxFlowTest extends TestCase
 
     public function test_apply_complete_todo_fuzzy_matches_existing(): void
     {
-        $todo = Todo::factory()->create(['title' => 'FB page video content', 'bucket' => 'work']);
+        $todo = Todo::factory()->for($this->user)->create(['title' => 'FB page video content', 'bucket' => 'work']);
 
         $this->actingAs($this->user)->postJson('/inbox/apply', [
             'raw_text' => 'fb video content ပြီးပြီ',
@@ -127,10 +128,10 @@ class InboxFlowTest extends TestCase
         ])->assertOk();
 
         $this->assertDatabaseHas('parser_examples', ['raw_text' => $raw]);
-        $example = \App\Models\ParserExample::first();
+        $example = ParserExample::first();
         $this->assertSame('add_todo', $example->corrected_json['action']);
         $this->assertArrayNotHasKey('confidence', $example->corrected_json);
-        $this->assertSame('money_task', \App\Models\Todo::first()->bucket);
+        $this->assertSame('money_task', Todo::first()->bucket);
     }
 
     public function test_uncorrected_apply_saves_no_example(): void
@@ -140,7 +141,7 @@ class InboxFlowTest extends TestCase
             'parsed' => ['action' => 'add_idea', 'target' => 'Mushroom selling'],
         ])->assertOk();
 
-        $this->assertSame(0, \App\Models\ParserExample::count());
+        $this->assertSame(0, ParserExample::count());
     }
 
     public function test_undo_twice_fails(): void

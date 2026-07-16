@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\BelongsToUser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,8 +10,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Todo extends Model
 {
-    use HasFactory, SoftDeletes;
+    use BelongsToUser, HasFactory, SoftDeletes;
 
+    // user_id is absent on purpose: ownership comes from the relation used to
+    // create the record ($user->todos()->create(...)), never from request input.
     protected $fillable = ['title', 'note', 'bucket', 'status', 'focused', 'due_date', 'due_time', 'reminded_at', 'done_at'];
 
     protected function casts(): array
@@ -26,7 +29,7 @@ class Todo extends Model
     }
 
     /** Open, has a time, not yet reminded, and that moment has passed. */
-    public function scopeDueForReminder(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    public function scopeDueForReminder(Builder $query): Builder
     {
         return $query->open()
             ->whereNotNull('due_date')

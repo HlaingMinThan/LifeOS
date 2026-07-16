@@ -2,7 +2,8 @@
 
 namespace App\Services\Inbox;
 
-use App\Models\Contact;
+use App\Models\User;
+use Illuminate\Support\Facades\Date;
 
 /**
  * Keyword-based stand-in for the Claude parser. Same output schema,
@@ -11,16 +12,16 @@ use App\Models\Contact;
  */
 class FakeParser implements ParserContract
 {
-    public function parse(string $text): array
+    public function parse(string $text, User $user): array
     {
         $t = $this->normalize($text);
         $amount = $this->extractAmount($t);
-        $contact = $this->matchContact($t);
+        $contact = $this->matchContact($t, $user);
 
         // "todos for <date>" → day lookup (mirrors the claude show_day action)
         if (preg_match('/todos? for (.+)$/iu', $t, $m)) {
             try {
-                $due = \Illuminate\Support\Facades\Date::parse(trim($m[1]))->toDateString();
+                $due = Date::parse(trim($m[1]))->toDateString();
 
                 return array_merge($this->result('show_day', null, null, 0.95), ['due' => $due]);
             } catch (\Throwable) {
@@ -37,8 +38,7 @@ class FakeParser implements ParserContract
             $this->hasAny($t, ['ပြီးပြီ', 'done', 'finished']) => $this->result('complete_todo', $this->cleanTitle($t)),
             $this->hasAny($t, ['idea', 'မှတ်ထား']) => $this->result('add_idea', $this->cleanTitle($t)),
             $this->hasAny($t, ['care:', 'flowers', 'ပန်းစည်း']) => $this->result('add_care_task', $this->cleanTitle($t)),
-            str_word_count(preg_replace('/[^\x20-\x7E]/u', 'x', $t)) >= 2 || mb_strlen($t) >= 6
-                => $this->result('add_todo', $this->cleanTitle($t), null, 0.75, 'personal'),
+            str_word_count(preg_replace('/[^\x20-\x7E]/u', 'x', $t)) >= 2 || mb_strlen($t) >= 6 => $this->result('add_todo', $this->cleanTitle($t), null, 0.75, 'personal'),
             default => $this->result('unknown', $text, null, 0.3),
         };
     }
@@ -97,9 +97,9 @@ class FakeParser implements ParserContract
         });
     }
 
-    private function matchContact(string $text): ?string
+    private function matchContact(string $text, User $user): ?string
     {
-        foreach (Contact::all() as $contact) {
+        foreach ($user->contacts()->get() as $contact) {
             $candidates = [$contact->name, ...($contact->aliases ?? [])];
             foreach ($candidates as $candidate) {
                 if ($candidate && str_contains($text, mb_strtolower($candidate))) {

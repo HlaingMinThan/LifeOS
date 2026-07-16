@@ -5,6 +5,7 @@ import { computed, ref } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import { apiPost } from '@/lib/api';
 import { formatDate, formatMmk, formatTime } from '@/lib/format';
+import { dismiss as dismissTelegram, edit as editTelegram } from '@/routes/telegram';
 
 type Todo = {
     id: number;
@@ -36,6 +37,7 @@ const props = defineProps<{
     money: { incoming: number; toPay: number; dueThisWeek: number; overdue: number };
     tomorrow: { todos: number; care: number };
     parkedIdea: string | null;
+    showTelegramPrompt: boolean;
 }>();
 
 const page = usePage();
@@ -64,6 +66,9 @@ const clearFocus = () => {
 };
 const setFocus = (t: Todo) =>
     router.patch(`/todos/${t.id}/focus`, {}, { preserveScroll: true });
+
+const dismissPrompt = () =>
+    router.patch(dismissTelegram().url, {}, { preserveScroll: true });
 
 const ACTION_LABELS: Record<string, string> = {
     mark_paid: 'Mark paid',
@@ -169,6 +174,38 @@ function dismiss() {
             >
                 <UserRound class="h-4 w-4" />
             </Link>
+        </div>
+    </div>
+
+    <!-- Optional, and asked once: "Not now" stamps a dismissal server-side. -->
+    <div
+        v-if="showTelegramPrompt"
+        class="mt-4 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-3"
+    >
+        <div class="flex items-start gap-3">
+            <Send class="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-500" />
+            <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium">Use Life OS from Telegram</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Type things from anywhere and get your morning digest and
+                    reminders. Takes about two minutes.
+                </p>
+                <div class="mt-2 flex items-center gap-2">
+                    <Link
+                        :href="editTelegram().url"
+                        class="rounded-full bg-gradient-brand px-3 py-1 text-xs font-medium text-white"
+                    >
+                        Set up
+                    </Link>
+                    <button
+                        type="button"
+                        class="rounded-full px-3 py-1 text-xs text-muted-foreground"
+                        @click="dismissPrompt"
+                    >
+                        Not now
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 

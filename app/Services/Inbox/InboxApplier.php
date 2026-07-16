@@ -4,10 +4,10 @@ namespace App\Services\Inbox;
 
 use App\Models\CareTask;
 use App\Models\Contact;
-use App\Models\Idea;
 use App\Models\InboxEvent;
 use App\Models\LedgerEntry;
 use App\Models\Todo;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -19,9 +19,9 @@ use Illuminate\Validation\ValidationException;
  */
 class InboxApplier
 {
-    public function apply(array $parsed, string $rawText): InboxEvent
+    public function apply(array $parsed, string $rawText, User $user): InboxEvent
     {
-        return DB::transaction(function () use ($parsed, $rawText) {
+        return DB::transaction(function () use ($parsed, $rawText, $user) {
             // Actions that create a record are undone by deleting it;
             // income_received sets this itself (it may match or create).
             $created = in_array($parsed['action'], [
@@ -29,14 +29,14 @@ class InboxApplier
             ]);
 
             $subject = match ($parsed['action']) {
-                'mark_paid' => $this->markPaid($parsed),
-                'income_received' => $this->incomeReceived($parsed, $created),
-                'add_payable' => $this->addLedger($parsed, 'payable'),
-                'add_receivable' => $this->addLedger($parsed, 'receivable'),
-                'add_todo' => $this->addTodo($parsed),
-                'complete_todo' => $this->completeTodo($parsed),
-                'add_care_task' => $this->addCareTask($parsed),
-                'add_idea' => Idea::create(['title' => $parsed['target']]),
+                'mark_paid' => $this->markPaid($parsed, $user),
+                'income_received' => $this->incomeReceived($parsed, $created, $user),
+                'add_payable' => $this->addLedger($parsed, 'payable', $user),
+                'add_receivable' => $this->addLedger($parsed, 'receivable', $user),
+                'add_todo' => $this->addTodo($parsed, $user),
+                'complete_todo' => $this->completeTodo($parsed, $user),
+                'add_care_task' => $this->addCareTask($parsed, $user),
+                'add_idea' => $user->ideas()->create(['title' => $parsed['target']]),
                 default => throw ValidationException::withMessages([
                     'text' => "I couldn't understand that — try rephrasing.",
                 ]),
@@ -44,7 +44,7 @@ class InboxApplier
 
             $parsed['_created'] = $created;
 
-            $event = new InboxEvent([
+            $event = $user->inboxEvents()->make([
                 'raw_text' => $rawText,
                 'parsed_json' => $parsed,
                 'applied' => true,
@@ -80,9 +80,9 @@ class InboxApplier
         });
     }
 
-    private function markPaid(array $parsed): LedgerEntry
+    private function markPaid(array $parsed, User $user): LedgerEntry
     {
-        $entry = $this->findLedger($parsed['target'] ?? '');
+        $entry = $this->findLedger($parsed['target'] ?? '', $user);
 
         if (! $entry) {
             throw ValidationException::withMessages([
@@ -96,9 +96,9 @@ class InboxApplier
     }
 
     /** Mark a matching open receivable paid; record new income if none exists. */
-    private function incomeReceived(array $parsed, bool &$created): LedgerEntry
+    private function incomeReceived(array $parsed, bool &$created, User $user): LedgerEntry
     {
-        if ($entry = $this->findLedger($parsed['target'] ?? '', 'receivable')) {
+        if ($entry = $this->findLedger($parsed['target'] ?? '', $user, 'receivable')) {
             $entry->update(['status' => 'paid', 'paid_at' => now()]);
 
             return $entry;
@@ -106,8 +106,8 @@ class InboxApplier
 
         $created = true;
 
-        return LedgerEntry::create([
-            'contact_id' => $this->contactFor($parsed['target'] ?? null)?->id,
+        return $user->ledgerEntries()->create([
+            'contact_id' => $this->contactFor($parsed['target'] ?? null, $user)?->id,
             'direction' => 'receivable',
             'title' => $parsed['target'] ?? 'Income',
             'amount_mmk' => $parsed['amount_mmk'] ?? 0,
@@ -116,10 +116,10 @@ class InboxApplier
         ]);
     }
 
-    private function addLedger(array $parsed, string $direction): LedgerEntry
+    private function addLedger(array $parsed, string $direction, User $user): LedgerEntry
     {
-        return LedgerEntry::create([
-            'contact_id' => $this->contactFor($parsed['target'] ?? null, createIfMissing: true)?->id,
+        return $user->ledgerEntries()->create([
+            'contact_id' => $this->contactFor($parsed['target'] ?? null, $user, createIfMissing: true)?->id,
             'direction' => $direction,
             'title' => $parsed['target'] ?? 'Untitled',
             'amount_mmk' => $parsed['amount_mmk'] ?? 0,
@@ -128,7 +128,7 @@ class InboxApplier
         ]);
     }
 
-    private function addTodo(array $parsed): Todo
+    private function addTodo(array $parsed, User $user): Todo
     {
         $dueTime = $parsed['due_time'] ?? null;
         // A time without a date means today — reminders need a date.
@@ -145,7 +145,7 @@ class InboxApplier
             }
         }
 
-        return Todo::create([
+        return $user->todos()->create([
             'title' => $parsed['target'] ?? 'Untitled',
             'bucket' => $parsed['bucket'] ?? 'personal',
             'due_date' => $dueDate,
@@ -153,9 +153,9 @@ class InboxApplier
         ]);
     }
 
-    private function completeTodo(array $parsed): Todo
+    private function completeTodo(array $parsed, User $user): Todo
     {
-        $todo = $this->bestMatch(Todo::open()->get(), $parsed['target'] ?? '', fn ($t) => [$t->title]);
+        $todo = $this->bestMatch($user->todos()->open()->get(), $parsed['target'] ?? '', fn ($t) => [$t->title]);
 
         if (! $todo) {
             throw ValidationException::withMessages([
@@ -168,13 +168,13 @@ class InboxApplier
         return $todo;
     }
 
-    private function addCareTask(array $parsed): CareTask
+    private function addCareTask(array $parsed, User $user): CareTask
     {
         $due = $parsed['due'] ? now()->parse($parsed['due']) : now()->addDay();
 
         // One-off phrases become weekly tasks anchored on the due weekday;
         // the Care screen is where schedules get refined.
-        return CareTask::create([
+        return $user->careTasks()->create([
             'title' => $parsed['target'] ?? 'Care task',
             'schedule_type' => 'weekly',
             'weekday' => $due->dayOfWeek,
@@ -184,9 +184,9 @@ class InboxApplier
         ]);
     }
 
-    private function findLedger(string $target, ?string $direction = null): ?LedgerEntry
+    private function findLedger(string $target, User $user, ?string $direction = null): ?LedgerEntry
     {
-        $query = LedgerEntry::open()->with('contact');
+        $query = $user->ledgerEntries()->open()->with('contact');
         if ($direction) {
             $query->where('direction', $direction);
         }
@@ -198,19 +198,21 @@ class InboxApplier
         );
     }
 
-    private function contactFor(?string $name, bool $createIfMissing = false): ?Contact
+    private function contactFor(?string $name, User $user, bool $createIfMissing = false): ?Contact
     {
         if (! $name) {
             return null;
         }
 
-        $existing = $this->bestMatch(Contact::all(), $name, fn ($c) => [$c->name, ...($c->aliases ?? [])]);
+        $existing = $this->bestMatch(
+            $user->contacts()->get(), $name, fn ($c) => [$c->name, ...($c->aliases ?? [])],
+        );
 
         if ($existing || ! $createIfMissing) {
             return $existing;
         }
 
-        return Contact::create(['name' => $name, 'aliases' => []]);
+        return $user->contacts()->create(['name' => $name, 'aliases' => []]);
     }
 
     /**

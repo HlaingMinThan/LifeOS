@@ -10,6 +10,9 @@ import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import type { NavItem } from '@/types';
 
+// Telegram is deliberately absent: it renders in the mobile shell (os/Telegram),
+// so linking to it from here would drop the user out of this layout mid-nav.
+// It lives on the Profile screen instead.
 const sidebarNavItems: NavItem[] = [
     {
         title: 'Profile',

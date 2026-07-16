@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\InboxEvent;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -12,14 +13,15 @@ class TelegramListenTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        config([
-            'lifeos.parser' => 'fake',
-            'lifeos.telegram.token' => 'test-token',
-            'lifeos.telegram.chat_id' => '12345',
-        ]);
+        config(['lifeos.parser' => 'fake']);
+        // The listener polls the bots of connected users; without one it has
+        // nothing to poll.
+        $this->user = User::factory()->withTelegram('12345')->create();
     }
 
     public function test_same_update_id_is_processed_only_once(): void

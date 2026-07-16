@@ -6,6 +6,7 @@ use App\Models\CareTask;
 use App\Models\Contact;
 use App\Models\LedgerEntry;
 use App\Models\Todo;
+use App\Models\User;
 use App\Services\DigestBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -14,18 +15,26 @@ class DigestTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = User::factory()->create();
+    }
+
     public function test_digest_contains_all_sections(): void
     {
-        $contact = Contact::factory()->create(['name' => 'Gon Khaung']);
-        LedgerEntry::factory()->create([
+        $contact = Contact::factory()->for($this->user)->create(['name' => 'Gon Khaung']);
+        LedgerEntry::factory()->for($this->user)->create([
             'contact_id' => $contact->id, 'direction' => 'payable', 'amount_mmk' => 500000,
         ]);
-        LedgerEntry::factory()->create(['direction' => 'receivable', 'title' => 'Cargo Pro fee', 'amount_mmk' => 780000]);
-        Todo::factory()->create(['title' => 'Renew insurance', 'due_date' => today()->subDays(2)]);
-        Todo::factory()->create(['title' => 'Ship order', 'due_date' => today()]);
-        CareTask::factory()->create(['title' => 'Send flowers', 'next_run_at' => now()]);
+        LedgerEntry::factory()->for($this->user)->create(['direction' => 'receivable', 'title' => 'Cargo Pro fee', 'amount_mmk' => 780000]);
+        Todo::factory()->for($this->user)->create(['title' => 'Renew insurance', 'due_date' => today()->subDays(2)]);
+        Todo::factory()->for($this->user)->create(['title' => 'Ship order', 'due_date' => today()]);
+        CareTask::factory()->for($this->user)->create(['title' => 'Send flowers', 'next_run_at' => now()]);
 
-        $digest = app(DigestBuilder::class)->build();
+        $digest = app(DigestBuilder::class)->build($this->user);
 
         $this->assertStringContainsString('Send flowers', $digest);
         $this->assertStringContainsString('Renew insurance', $digest);
@@ -36,10 +45,10 @@ class DigestTest extends TestCase
 
     public function test_digest_todos_are_grouped_by_bucket(): void
     {
-        Todo::factory()->create(['title' => 'fb content plan', 'bucket' => 'work']);
-        Todo::factory()->create(['title' => 'buy groceries', 'bucket' => 'personal']);
+        Todo::factory()->for($this->user)->create(['title' => 'fb content plan', 'bucket' => 'work']);
+        Todo::factory()->for($this->user)->create(['title' => 'buy groceries', 'bucket' => 'personal']);
 
-        $digest = app(DigestBuilder::class)->build();
+        $digest = app(DigestBuilder::class)->build($this->user);
 
         $work = strpos($digest, 'Work:');
         $personal = strpos($digest, 'Personal:');
@@ -52,10 +61,10 @@ class DigestTest extends TestCase
 
     public function test_undated_open_todos_appear_in_daily_digest(): void
     {
-        Todo::factory()->create(['title' => 'Journaling ပြန်ရေးရမယ်']);
-        Todo::factory()->done()->create(['title' => 'finished undated']);
+        Todo::factory()->for($this->user)->create(['title' => 'Journaling ပြန်ရေးရမယ်']);
+        Todo::factory()->for($this->user)->done()->create(['title' => 'finished undated']);
 
-        $digest = app(DigestBuilder::class)->build();
+        $digest = app(DigestBuilder::class)->build($this->user);
 
         $this->assertStringContainsString('📝 Open (no date):', $digest);
         $this->assertStringContainsString('Journaling ပြန်ရေးရမယ်', $digest);
@@ -64,20 +73,20 @@ class DigestTest extends TestCase
 
     public function test_empty_digest_celebrates(): void
     {
-        $this->assertStringContainsString('Nothing needs you today', app(DigestBuilder::class)->build());
+        $this->assertStringContainsString('Nothing needs you today', app(DigestBuilder::class)->build($this->user));
     }
 
     public function test_future_dated_money_stays_out_of_today(): void
     {
-        LedgerEntry::factory()->create([
+        LedgerEntry::factory()->for($this->user)->create([
             'direction' => 'receivable', 'title' => 'Cargo Pro income',
             'amount_mmk' => 780000, 'due_date' => today()->addDay(),
         ]);
-        LedgerEntry::factory()->create([
+        LedgerEntry::factory()->for($this->user)->create([
             'direction' => 'receivable', 'title' => 'No-date debt', 'amount_mmk' => 50000,
         ]);
 
-        $digest = app(DigestBuilder::class)->build();
+        $digest = app(DigestBuilder::class)->build($this->user);
 
         $this->assertStringNotContainsString('Cargo Pro income', $digest);
         $this->assertStringContainsString('No-date debt', $digest); // undated stays visible
@@ -85,12 +94,12 @@ class DigestTest extends TestCase
 
     public function test_by_date_view_shows_money_due_that_day(): void
     {
-        LedgerEntry::factory()->create([
+        LedgerEntry::factory()->for($this->user)->create([
             'direction' => 'receivable', 'title' => 'Cargo Pro income',
             'amount_mmk' => 780000, 'due_date' => today()->addDay(),
         ]);
 
-        $view = app(DigestBuilder::class)->forDate(today()->addDay());
+        $view = app(DigestBuilder::class)->forDate($this->user, today()->addDay());
 
         $this->assertStringContainsString('Cargo Pro income — 780,000 Ks ← receive', $view);
     }

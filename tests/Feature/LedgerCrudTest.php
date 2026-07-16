@@ -21,8 +21,8 @@ class LedgerCrudTest extends TestCase
 
     public function test_money_page_caps_settled_history(): void
     {
-        LedgerEntry::factory()->create(); // open
-        LedgerEntry::factory()->paid()->count(20)->create();
+        LedgerEntry::factory()->for($this->user)->create(); // open
+        LedgerEntry::factory()->for($this->user)->paid()->count(20)->create();
 
         $this->actingAs($this->user)->get('/money')
             ->assertInertia(fn ($page) => $page
@@ -54,7 +54,7 @@ class LedgerCrudTest extends TestCase
 
     public function test_entry_can_be_edited(): void
     {
-        $entry = LedgerEntry::factory()->create([
+        $entry = LedgerEntry::factory()->for($this->user)->create([
             'direction' => 'payable', 'title' => 'old', 'amount_mmk' => 100000,
         ]);
 
@@ -84,7 +84,7 @@ class LedgerCrudTest extends TestCase
 
     public function test_editing_does_not_change_status_or_paid_at(): void
     {
-        $entry = LedgerEntry::factory()->paid()->create(['amount_mmk' => 100000]);
+        $entry = LedgerEntry::factory()->for($this->user)->paid()->create(['amount_mmk' => 100000]);
 
         $this->actingAs($this->user)->patch("/ledger/{$entry->id}", [
             'direction' => $entry->direction,

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Concerns\BelongsToUser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LedgerEntry extends Model
 {
-    use HasFactory, SoftDeletes;
+    use BelongsToUser, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'contact_id', 'direction', 'title', 'amount_mmk', 'amount_usd',

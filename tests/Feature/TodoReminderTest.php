@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Todo;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -11,18 +12,20 @@ class TodoReminderTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
         // Mid-day, so "+1 hour" / "-1 minute" never cross midnight.
         $this->travelTo(now()->setTime(12, 0));
-        config(['lifeos.telegram.token' => 'test-token', 'lifeos.telegram.chat_id' => '12345']);
+        $this->user = User::factory()->withTelegram()->create();
         Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
     }
 
     public function test_timed_todo_fires_once_when_time_arrives(): void
     {
-        $todo = Todo::factory()->create([
+        $todo = Todo::factory()->for($this->user)->create([
             'title' => 'ည ၁၀ နာရီ ဆေးသောက်ရန်',
             'note' => 'blood pressure pills',
             'due_date' => today(),
@@ -43,11 +46,11 @@ class TodoReminderTest extends TestCase
 
     public function test_future_time_and_done_todos_do_not_fire(): void
     {
-        Todo::factory()->create([
+        Todo::factory()->for($this->user)->create([
             'due_date' => today(),
             'due_time' => now()->addHour()->format('H:i:s'),
         ]);
-        Todo::factory()->done()->create([
+        Todo::factory()->for($this->user)->done()->create([
             'due_date' => today(),
             'due_time' => now()->subHour()->format('H:i:s'),
         ]);
@@ -59,9 +62,7 @@ class TodoReminderTest extends TestCase
 
     public function test_explicitly_past_time_is_rejected_with_clear_error(): void
     {
-        $user = \App\Models\User::factory()->create();
-
-        $response = $this->actingAs($user)->postJson('/inbox/apply', [
+        $response = $this->actingAs($this->user)->postJson('/inbox/apply', [
             'raw_text' => 'today 9am take medicine',
             'parsed' => [
                 'action' => 'add_todo',
@@ -78,14 +79,13 @@ class TodoReminderTest extends TestCase
 
     public function test_rescheduling_rearms_the_reminder(): void
     {
-        $user = \App\Models\User::factory()->create();
-        $todo = Todo::factory()->create([
+        $todo = Todo::factory()->for($this->user)->create([
             'due_date' => today(),
             'due_time' => '08:00:00',
             'reminded_at' => now(),
         ]);
 
-        $this->actingAs($user)->patch("/todos/{$todo->id}", [
+        $this->actingAs($this->user)->patch("/todos/{$todo->id}", [
             'title' => $todo->title,
             'bucket' => $todo->bucket,
             'due_date' => today()->toDateString(),

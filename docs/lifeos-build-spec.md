@@ -1,6 +1,6 @@
 # Life OS — Build Spec (HLD-lite)
 
-Personal, single-user Life OS. Laravel 12 / Inertia / Vue 3 / Tailwind, mobile-first PWA.
+Multi-user Life OS — one isolated workspace per account. Laravel 12 / Inertia / Vue 3 / Tailwind, mobile-first PWA.
 Goal: state persists so "catching up" = open one screen, never rewrite lists again.
 Input philosophy: one magic text box (typed, Burmese/English/mixed) parsed by Claude into actions. No category pickers, no forms as the default path.
 
@@ -17,17 +17,22 @@ Input philosophy: one magic text box (typed, Burmese/English/mixed) parsed by Cl
 
 **Out (V1):** multi-user, roles/policies, budgets/analytics, voice input, offline sync, native app.
 
-**Added after V1:** todo calendar + day timeline, todo detail page with rich-text notes, focus mode, per-todo timed reminders, natural-language date queries. See §9 for the current backlog.
+**Added after V1:** todo calendar + day timeline, todo detail page with rich-text notes, focus mode, per-todo timed reminders, natural-language date queries, **multi-user + per-user Telegram bots** (§11). See §9 for the current backlog.
 
 ---
 
 ## 2. Database schema
 
+Every table below carries `user_id` — one account, one isolated Life OS. See §11.
+
 ```
-users            (single seeded user; Fortify + passkeys/2FA from the starter kit)
+users            (Fortify + passkeys/2FA from the starter kit)
+  … plus the per-user bot: telegram_bot_token (encrypted), telegram_bot_username,
+  telegram_chat_id, telegram_webhook_secret (unique), telegram_linked_at,
+  telegram_prompt_dismissed_at
 
 contacts
-  id, name, aliases (json: ["Gon Khaung","ဂွန်ခေါင်"]), timestamps
+  id, user_id, name, aliases (json: ["Gon Khaung","ဂွန်ခေါင်"]), timestamps
 
 ledger_entries
   id, contact_id (nullable), direction ENUM(payable, receivable),
@@ -71,14 +76,29 @@ Undo = read `inbox_events.parsed_json`, apply the inverse (mark_paid → reopen,
 - `todos.note` holds **HTML** from the rich-text editor, sanitized server-side (allowlist: `p br strong b em i u s ul ol li h1-h4 code pre blockquote a`). Plain text is valid too.
 - `due_date` indexes on `todos` and `ledger_entries` — every screen runs date-scoped queries.
 - **Timezone: `APP_TIMEZONE=Asia/Yangon`** (default was UTC, which put the "7 AM" digest at 1:30 PM local).
+- `user_id` is **not** in any `$fillable` — ownership comes from the relation used to create the
+  record (`$user->todos()->create(...)`), never from request input. `care_task_logs` has no
+  `user_id`; it inherits its owner through `care_task_id`.
 
 ---
 
 ## 3. Routes
 
+Every route below is scoped to `$request->user()`. Records resolve through the owner's relation
+(`$request->user()->todos()->findOrFail($id)`), **not** plain route-model binding — another
+account's id must 404, not resolve.
+
 ```
 GET  /                          Catch-up dashboard (Inertia)
 GET  /profile                   Profile + logout + settings shortcuts
+
+POST /telegram/webhook/{secret} Telegram delivery (public; see §5)
+
+GET    /settings/telegram        Guided bot setup
+POST   /settings/telegram/token  Validate via getMe, then store
+POST   /settings/telegram/detect Read chat_id from getUpdates, register webhook
+DELETE /settings/telegram        Disconnect (also deleteWebhook)
+PATCH  /settings/telegram/dismiss  "Not now" on the Home nudge
 
 POST /inbox/parse               { text } → Claude → parsed action JSON (NOT applied)
 POST /inbox/apply               { raw_text, parsed, corrected? } → applies, writes inbox_events
@@ -113,6 +133,8 @@ Two-step parse→apply is deliberate: the **editable** confirm chip sits between
 ## 4. Parser (the heart of the app)
 
 System prompt in English, few-shot in Burmese/mixed. Sends a **live data snapshot** (contacts + aliases, open ledger titles, open todo titles), the **10 most recent `parser_examples`**, and the **last 5 commands from 30 minutes** (short-term memory) so the model resolves against real records and recent context.
+
+`ParserContract::parse(string $text, User $user)` — **every snapshot query is scoped to `$user`**. The prompt leaves the building, so a leak here would hand one person's contacts and debts to another's parse. `MultiUserScopingTest` asserts this against the request body; note the prompt's own few-shot examples mention "Gon Khaung", so a leak test must use a name that can only come from the database.
 
 Config: `INBOX_PARSER=claude|fake` · model `claude-sonnet-5` · **thinking disabled** (adaptive thinking tripled latency and buried the JSON in a later content block) · single parse `max_tokens` 300, timeout 20s, 2 retries.
 
@@ -157,9 +179,23 @@ Correcting a parse in the confirm chip (or Import review) posts `corrected: true
 
 ## 5. Telegram
 
-**Long-polling, not webhooks** — `php artisan telegram:listen` calls `getUpdates` in a loop. There are no webhook routes; ignore any webhook-based advice.
+**Every user brings their own bot** (BotFather → Settings → Telegram, §11). Transport depends on
+the environment, and both paths share one `InboxBridge::handle($message, $user)`:
 
-- Bot token + chat_id in `.env` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`). Messages from other chats are ignored.
+- **Production → webhooks.** `POST /telegram/webhook/{secret}`. The URL secret identifies the
+  account; the `X-Telegram-Bot-Api-Secret-Token` header (which Telegram echoes from `setWebhook`)
+  authenticates the request. The URL alone is an identifier, not a key — it travels through logs
+  and proxies. Always returns 200, or Telegram retry-storms. CSRF-exempt in `bootstrap/app.php`
+  (Telegram has no session); note **tests cannot cover that exemption** — Laravel skips CSRF when
+  running tests, so verify with a real POST against a served host.
+- **Local dev → `php artisan telegram:listen`.** `lifeos.test` has no public HTTPS for Telegram to
+  reach. `getUpdates` is per-bot, so the listener walks each connected bot per cycle: one bot gets
+  a real 50s long poll, several take turns at 2s each.
+- `config('lifeos.telegram.webhook_enabled')` picks the path, defaulting to whether `APP_URL` is
+  https. The `.env` `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` are **legacy** — read only by the
+  2026_07_17 migration, which moved the original single bot onto user 1.
+
+- Messages from a chat other than the bot's linked `telegram_chat_id` are ignored.
 - **Any sentence** → parse → apply → reply (no confirm chip in chat; confident parses apply directly). Replies are line-broken and show 📅 date (always for money, incl. "no date") and ⏰ time so a wrong parse is caught at entry.
 - **Multi-line messages** route through batch mode (§4) and report per item (✅ applied / 🤔 skipped / ⚠️ failed).
 - **Commands** work bare or slashed, case-insensitive, exact single word only (so "today buy milk" is still a todo):
@@ -170,7 +206,7 @@ Correcting a parse in the confirm chip (or Import review) posts `corrected: true
 
 Duplicates came from **two `telegram:listen` processes** polling concurrently — long-poll hands the same update to both before either advances the offset.
 
-1. **Per-`update_id` idempotency** — `Cache::add('telegram:seen:{id}')` is atomic; only the first caller processes an update.
+1. **Per-`update_id` idempotency** — `Cache::add('telegram:seen:{user}:{id}')` is atomic; only the first caller processes an update. Keyed by user: `update_id` is unique only *within a bot*, so two bots legitimately both send #7. The webhook reuses this against Telegram's own retries.
 2. **Single-instance guard** — heartbeat key `telegram:listen:owner` (120s TTL, refreshed each poll); a second long-running listener exits immediately. Released on clean exit so a supervisor restart reclaims at once. `--once` skips the guard so cron/tests compose.
 
 Both need an **atomic cache driver** (`database`/redis — not `file`/`array`). Still run exactly one listener (supervisor `numprocs=1`).
@@ -182,6 +218,9 @@ care:run      everyMinute   fire due care tasks → Telegram → log → resched
 todos:remind  everyMinute   ⏰ ping when a timed todo reaches its due time (reminded_at guards repeats)
 digest:send   dailyAt 07:00 the catch-up screen, pushed
 ```
+
+`care:run` and `todos:remind` still query across everyone — each record carries its owner, so the
+notification follows `$task->user` to the right bot. `digest:send` loops users with a linked chat.
 
 Random care tasks reschedule to `now + rand(min_days, max_days)` on every fire — the unpredictability is the feature.
 
@@ -219,7 +258,7 @@ Delivered on schedule (Days 1–3 finished a day early); Day 4 expanded into the
 ## 9. Post-V1 status & backlog
 
 ### Shipped after V1
-Todo calendar + day timeline · todo detail page + rich-text notes · focus mode · timed todo reminders · `show_day` queries · `/care` `/idea` `/tomorrow` `/yesterday` `/todobydate` commands · bare-word commands · purple/pink redesign · profile/logout · scalability pass (capped lists, indexes) · Telegram duplicate fix.
+Todo calendar + day timeline · todo detail page + rich-text notes · focus mode · timed todo reminders · `show_day` queries · `/care` `/idea` `/tomorrow` `/yesterday` `/todobydate` commands · bare-word commands · purple/pink redesign · profile/logout · scalability pass (capped lists, indexes) · Telegram duplicate fix · **multi-user data scoping + per-user Telegram bots with guided setup** (§11).
 
 ### Operational / deploy
 - Production at `/var/www/LifeOS`. **Any deploy touching `routes/`, `config/`, or `.env` must rebuild caches** — a stale `bootstrap/cache/routes-v7.php` makes new routes 404 (this bit us on the focus route):
@@ -233,7 +272,9 @@ Todo calendar + day timeline · todo detail page + rich-text notes · focus mode
 - Local: `php artisan schedule:work` + `php artisan telegram:listen` must be running. Restart the listener after any parser/bridge change (it holds old code in memory). Use `lifeos.test` (Herd), not `artisan serve` — that's single-threaded and blocks during a dump.
 
 ### Open items
-- **Per-user Telegram token in Settings** + guided setup (BotFather → paste token → auto-detect chat_id). Token is currently `.env`-only.
+- **Registration is open to anyone with the URL** and parses bill the app owner's single
+  `ANTHROPIC_API_KEY`. Deliberate for now; the cheap mitigations are a throttle on `/inbox/parse`
+  + `/onboard/dump`, or an invite gate.
 - Re-import real brain dump (data lost in the MySQL switch); set real care schedules.
 - Change seeded password (`lifeos-2026`); PWA install on phone.
 
@@ -244,4 +285,54 @@ Funding links (an expense knows which incomes pay for it) · per-person money pa
 
 ## 10. Testing
 
-118 tests (`php artisan test`). `INBOX_PARSER=fake` is pinned in `phpunit.xml` so tests never hit the paid API; `TodoReminderTest` freezes the clock at noon to avoid midnight flakes. Frontend changes: run the suite + `npm run build` — **the user tests the UI himself**, don't launch a preview browser.
+148 tests (`php artisan test`). `INBOX_PARSER=fake` is pinned in `phpunit.xml` so tests never hit the paid API; `TodoReminderTest` freezes the clock at noon to avoid midnight flakes. Frontend changes: run the suite + `npm run build` — **the user tests the UI himself**, don't launch a preview browser.
+
+**Tests run on SQLite `:memory:`; dev and prod are MySQL.** Migrations must work on both — SQLite
+cannot `ALTER TABLE ADD CONSTRAINT`, so a foreign key has to be declared when the column is added,
+not bolted on afterwards. MySQL auto-creates an index for a FK; SQLite does not (harmless, since
+only tests run there).
+
+Domain factories default `user_id` to a **fresh** `User::factory()`, so a test that forgets
+`->for($user)` fails loudly rather than silently reading someone else's data.
+`User::factory()->withTelegram()` gives an account that has finished the setup wizard.
+
+---
+
+## 11. Multi-user + per-user Telegram bots (July 17)
+
+### Why
+
+The starter kit shipped `Features::registration()` enabled, but **no domain table had a `user_id`**
+and every query was global (`Todo::open()`). Three accounts had signed up. They could all read and
+edit each other's money. Route-model binding (`show(Todo $todo)`) resolved any id for anyone.
+
+So "give each user their own bot token" could not ship alone: a second user's bot would have written
+into the first user's ledger. Scoping the data was the prerequisite, not a follow-up.
+
+### How it works
+
+- **`BelongsToUser`** on the seven domain models: `user()` + `scopeForUser()`. Scoping is
+  **explicit, not a global scope** — the scheduler, the webhook and the listener all run with no
+  authenticated user, and a scope keyed on `Auth::id()` would silently return nothing there.
+- Controllers read through the relation (`$request->user()->todos()`) and resolve ids with
+  `findOrFail` on it. Services take a `User`: `parse($text, $user)`, `apply($parsed, $raw, $user)`,
+  `build($user)`, `handle($message, $user)`.
+- **One bot per account.** The token is `encrypted` at rest and in the model's `Hidden` list — it is
+  a bearer credential, so it must never ride along in an Inertia prop. A token already registered to
+  another account is refused (two accounts on one bot would answer each other's messages).
+- **Setup order is forced by Telegram:** `getUpdates` and a webhook are mutually exclusive, so the
+  wizard must read `chat_id` *before* calling `setWebhook` — and calls `deleteWebhook` first so
+  re-running setup on a connected bot still works.
+
+### Landmines
+
+- **The wizard's steps are verified against Telegram, not trusted.** `getMe` proves the token before
+  it is stored, so a typo fails in the UI instead of producing a bot that silently never answers.
+- **Focus was global.** `Todo::where('focused', true)->update(...)` cleared *everyone's* pinned todo.
+  Single-focus is per person.
+- **The `awaiting_date` cache key was global**, so two people mid-`/todobydate` would have answered
+  each other's question. Keyed per user now.
+- **Deploy must rebuild caches** (§9) — new routes plus a changed `bootstrap/app.php`. A stale
+  `bootstrap/cache/routes-v7.php` 404s the webhook exactly like it did the focus route.
+- **Prod cutover:** deploy → migrate (moves the `.env` bot onto user 1, so the live bot survives) →
+  visit Settings → Telegram once to register the webhook → then stop the prod `telegram:listen`.

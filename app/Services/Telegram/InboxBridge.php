@@ -2,15 +2,14 @@
 
 namespace App\Services\Telegram;
 
-use App\Models\CareTask;
-use App\Models\Idea;
-use App\Models\InboxEvent;
+use App\Models\User;
 use App\Services\DigestBuilder;
 use App\Services\Inbox\BrainDumpParser;
 use App\Services\Inbox\InboxApplier;
 use App\Services\Inbox\ParserContract;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -39,12 +38,15 @@ class InboxBridge
         private DigestBuilder $digest,
     ) {}
 
-    /** Returns the reply text, or null when the message should be ignored. */
-    public function handle(array $message): ?string
+    /**
+     * Returns the reply text, or null when the message should be ignored.
+     * $user is the bot's owner — everything this message touches is theirs.
+     */
+    public function handle(array $message, User $user): ?string
     {
         $chatId = (string) ($message['chat']['id'] ?? '');
-        if ($chatId !== (string) config('lifeos.telegram.chat_id')) {
-            return null; // single-user app: ignore strangers
+        if ($chatId !== (string) $user->telegram_chat_id) {
+            return null; // each bot answers only to the chat it was linked to
         }
 
         $text = trim($message['text'] ?? '');
@@ -55,41 +57,47 @@ class InboxBridge
         // Commands work with or without the slash: "today", "/today", "tdy"…
         return match (strtolower(ltrim($text, '/'))) {
             'start', 'help' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\nCommands (slash optional): today/tdy · tomorrow/tmr · yesterday · todobydate · care · idea · undo",
-            'today', 'tdy' => $this->digest->build(),
-            'tomorrow', 'tmr' => $this->digest->forDate(today()->addDay()),
-            'yesterday' => $this->digest->forDate(today()->subDay()),
-            'todobydate' => $this->askForDate(),
-            'care' => $this->listCareTasks(),
-            'idea', 'ideas' => $this->listIdeas(),
-            'undo' => $this->undoLatest(),
-            default => $this->freeText($text),
+            'today', 'tdy' => $this->digest->build($user),
+            'tomorrow', 'tmr' => $this->digest->forDate($user, today()->addDay()),
+            'yesterday' => $this->digest->forDate($user, today()->subDay()),
+            'todobydate' => $this->askForDate($user),
+            'care' => $this->listCareTasks($user),
+            'idea', 'ideas' => $this->listIdeas($user),
+            'undo' => $this->undoLatest($user),
+            default => $this->freeText($text, $user),
         };
     }
 
-    private function freeText(string $text): string
+    private function freeText(string $text, User $user): string
     {
         // /todobydate asked a question; this message is the answer.
-        if (Cache::pull('telegram:awaiting_date')) {
+        if (Cache::pull($this->awaitingDateKey($user))) {
             if ($date = $this->resolveDate($text)) {
-                return $this->digest->forDate($date);
+                return $this->digest->forDate($user, $date);
             }
 
-            Cache::put('telegram:awaiting_date', true, now()->addMinutes(5));
+            Cache::put($this->awaitingDateKey($user), true, now()->addMinutes(5));
 
             return "🤔 Couldn't read that date — try like \"July 6\", \"2026-07-06\", or \"6.7\".";
         }
 
         // A multi-line message is a mini brain dump: one action per line.
         return str_contains($text, "\n")
-            ? $this->applyMany($text)
-            : $this->applyText($text);
+            ? $this->applyMany($text, $user)
+            : $this->applyText($text, $user);
     }
 
-    private function askForDate(): string
+    private function askForDate(User $user): string
     {
-        Cache::put('telegram:awaiting_date', true, now()->addMinutes(5));
+        Cache::put($this->awaitingDateKey($user), true, now()->addMinutes(5));
 
         return '📅 Which date? (e.g. "July 6", "2026-07-06", "6.7")';
+    }
+
+    /** Per-user: two people mid-/todobydate must not answer each other's question. */
+    private function awaitingDateKey(User $user): string
+    {
+        return "telegram:awaiting_date:{$user->id}";
     }
 
     private function resolveDate(string $text): ?CarbonInterface
@@ -106,17 +114,17 @@ class InboxBridge
         }
 
         try {
-            return \Illuminate\Support\Facades\Date::parse($text);
+            return Date::parse($text);
         } catch (Throwable) {
             return null;
         }
     }
 
-    private function applyMany(string $text): string
+    private function applyMany(string $text, User $user): string
     {
         $lines = [];
 
-        foreach ($this->dumpParser->parse($text) as $item) {
+        foreach ($this->dumpParser->parse($text, $user) as $item) {
             $parsed = $item['parsed'];
 
             if ($parsed['action'] === 'unknown' || $parsed['confidence'] < 0.7) {
@@ -126,7 +134,7 @@ class InboxBridge
             }
 
             try {
-                $this->applier->apply($parsed, $item['raw_text']);
+                $this->applier->apply($parsed, $item['raw_text'], $user);
                 $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
                 $amount = $parsed['amount_mmk'] ? ' · '.number_format($parsed['amount_mmk']).' Ks' : '';
                 $time = ($parsed['due_time'] ?? null) ? ' ⏰ '.$this->fmtTime($parsed['due_time']) : '';
@@ -142,10 +150,10 @@ class InboxBridge
         return implode("\n", $lines);
     }
 
-    private function applyText(string $text): string
+    private function applyText(string $text, User $user): string
     {
         try {
-            $parsed = $this->parser->parse($text);
+            $parsed = $this->parser->parse($text, $user);
         } catch (Throwable $e) {
             report($e);
 
@@ -159,12 +167,12 @@ class InboxBridge
         // A question about a date answers with that day, applies nothing.
         if ($parsed['action'] === 'show_day') {
             return ($parsed['due'] ?? null)
-                ? $this->digest->forDate(\Illuminate\Support\Facades\Date::parse($parsed['due']))
-                : $this->askForDate();
+                ? $this->digest->forDate($user, Date::parse($parsed['due']))
+                : $this->askForDate($user);
         }
 
         try {
-            $this->applier->apply($parsed, $text);
+            $this->applier->apply($parsed, $text, $user);
         } catch (ValidationException $e) {
             return '⚠️ '.collect($e->errors())->flatten()->first();
         }
@@ -203,9 +211,9 @@ class InboxBridge
             : '';
     }
 
-    private function listCareTasks(): string
+    private function listCareTasks(User $user): string
     {
-        $tasks = CareTask::orderByDesc('active')->orderBy('next_run_at')->get();
+        $tasks = $user->careTasks()->orderByDesc('active')->orderBy('next_run_at')->get();
 
         if ($tasks->isEmpty()) {
             return 'No care tasks yet — add one on the Care screen.';
@@ -229,9 +237,9 @@ class InboxBridge
         return implode("\n", $lines);
     }
 
-    private function listIdeas(): string
+    private function listIdeas(User $user): string
     {
-        $ideas = Idea::latest()->get();
+        $ideas = $user->ideas()->latest()->get();
 
         if ($ideas->isEmpty()) {
             return 'The parking lot is empty — "mushroom idea မှတ်ထား" to park one.';
@@ -246,9 +254,9 @@ class InboxBridge
         return implode("\n", $lines);
     }
 
-    private function undoLatest(): string
+    private function undoLatest(User $user): string
     {
-        $event = InboxEvent::where('applied', true)
+        $event = $user->inboxEvents()->where('applied', true)
             ->whereNull('reverted_at')
             ->latest('id')
             ->first();

@@ -10,10 +10,10 @@ use Inertia\Response;
 
 class CareController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         return Inertia::render('os/Care', [
-            'tasks' => CareTask::orderByDesc('active')
+            'tasks' => $request->user()->careTasks()->orderByDesc('active')
                 ->orderBy('next_run_at')
                 ->get(),
         ]);
@@ -21,35 +21,43 @@ class CareController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $task = new CareTask($this->validated($request));
+        $task = $request->user()->careTasks()->make($this->validated($request));
         $task->next_run_at = $task->initialNextRun();
         $task->save();
 
         return back();
     }
 
-    public function update(Request $request, CareTask $task): RedirectResponse
+    public function update(Request $request, int $task): RedirectResponse
     {
-        $task->fill($this->validated($request));
+        $model = $this->find($request, $task);
+        $model->fill($this->validated($request));
         // Schedule may have changed — recompute from the new settings.
-        $task->next_run_at = $task->initialNextRun();
-        $task->save();
+        $model->next_run_at = $model->initialNextRun();
+        $model->save();
 
         return back();
     }
 
-    public function toggle(CareTask $task): RedirectResponse
+    public function toggle(Request $request, int $task): RedirectResponse
     {
-        $task->update(['active' => ! $task->active]);
+        $model = $this->find($request, $task);
+        $model->update(['active' => ! $model->active]);
 
         return back();
     }
 
-    public function destroy(CareTask $task): RedirectResponse
+    public function destroy(Request $request, int $task): RedirectResponse
     {
-        $task->delete();
+        $this->find($request, $task)->delete();
 
         return back();
+    }
+
+    /** Resolve through the owner, so another user's id is a 404, not a leak. */
+    private function find(Request $request, int $id): CareTask
+    {
+        return $request->user()->careTasks()->findOrFail($id);
     }
 
     private function validated(Request $request): array

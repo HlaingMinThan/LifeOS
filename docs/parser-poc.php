@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Life OS parser proof-of-concept.
  *
@@ -8,9 +9,8 @@
  * Usage:  ANTHROPIC_API_KEY=sk-ant-... php parser-poc.php [model]
  * Default model: claude-sonnet-5 (try claude-haiku-4-5-20251001 for speed/cost comparison)
  */
-
 $apiKey = getenv('ANTHROPIC_API_KEY');
-if (!$apiKey) {
+if (! $apiKey) {
     fwrite(STDERR, "Set ANTHROPIC_API_KEY first: ANTHROPIC_API_KEY=sk-ant-... php parser-poc.php\n");
     exit(1);
 }
@@ -107,7 +107,7 @@ function callClaude(string $apiKey, string $model, string $system, string $user)
         CURLOPT_POSTFIELDS => $payload,
         CURLOPT_HTTPHEADER => [
             'Content-Type: application/json',
-            'x-api-key: ' . $apiKey,
+            'x-api-key: '.$apiKey,
             'anthropic-version: 2023-06-01',
         ],
         CURLOPT_TIMEOUT => 30,
@@ -132,11 +132,11 @@ function callClaude(string $apiKey, string $model, string $system, string $user)
     }
 
     return ['text' => $text, 'ms' => $ms,
-            'in' => $body['usage']['input_tokens'] ?? 0, 'out' => $body['usage']['output_tokens'] ?? 0];
+        'in' => $body['usage']['input_tokens'] ?? 0, 'out' => $body['usage']['output_tokens'] ?? 0];
 }
 
 echo "Model: {$model}\n";
-echo str_repeat('=', 100) . "\n";
+echo str_repeat('=', 100)."\n";
 $totalMs = 0;
 foreach ($tests as $i => $phrase) {
     $r = callClaude($apiKey, $model, $system, $phrase);
@@ -144,6 +144,7 @@ foreach ($tests as $i => $phrase) {
     printf("%2d. %s\n", $i + 1, $phrase);
     if (isset($r['error'])) {
         printf("    ERROR (%d ms): %s\n", $r['ms'], $r['error']);
+
         continue;
     }
     $parsed = json_decode($r['text'], true);

@@ -2,6 +2,8 @@
 
 namespace App\Services\Inbox;
 
+use App\Models\User;
+
 interface ParserContract
 {
     /**
@@ -9,6 +11,9 @@ interface ParserContract
      * ['action' => ..., 'target' => ..., 'amount_mmk' => int|null,
      *  'due' => 'Y-m-d'|null, 'bucket' => 'work'|'personal'|null,
      *  'confidence' => float]
+     *
+     * $user owns the command: matching and the prompt snapshot resolve
+     * against their records only.
      */
-    public function parse(string $text): array;
+    public function parse(string $text, User $user): array;
 }

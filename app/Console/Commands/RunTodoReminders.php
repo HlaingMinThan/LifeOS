@@ -14,7 +14,7 @@ class RunTodoReminders extends Command
 
     public function handle(TelegramClient $telegram): int
     {
-        $due = Todo::dueForReminder()->get()
+        $due = Todo::with('user')->dueForReminder()->get()
             ->filter(fn (Todo $todo) => $todo->due_date
                 ->setTimeFromTimeString($todo->due_time)
                 ->isPast());
@@ -25,7 +25,7 @@ class RunTodoReminders extends Command
                 $message .= "\n{$todo->note}";
             }
 
-            $telegram->send($message);
+            $telegram->forUser($todo->user)->send($message);
             $todo->update(['reminded_at' => now()]);
 
             $this->info("Reminded: {$todo->title}");
