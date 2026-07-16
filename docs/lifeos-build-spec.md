@@ -1,171 +1,247 @@
 # Life OS — Build Spec (HLD-lite)
 
-Personal, single-user Life OS. Laravel 11+ / Inertia / Vue 3 / Tailwind, mobile-first PWA.
+Personal, single-user Life OS. Laravel 12 / Inertia / Vue 3 / Tailwind, mobile-first PWA.
 Goal: state persists so "catching up" = open one screen, never rewrite lists again.
 Input philosophy: one magic text box (typed, Burmese/English/mixed) parsed by Claude into actions. No category pickers, no forms as the default path.
+
+> **Status: V1 shipped and deployed.** Days 1–4 complete, plus post-V1 work (§9).
+> This doc tracks what exists, not what was planned — the original 4-day plan is in §8 for history.
+> Stack changed during the build: **Laravel 12 Vue starter kit** (not Breeze — Breeze is discontinued;
+> the kit ships Fortify auth, TypeScript, shadcn-vue) and **MySQL** (migrated from SQLite July 8).
 
 ---
 
 ## 1. Scope
 
-**In (V1, 4 days):** money ledger (payables / receivables), todos (work + personal), care tasks (recurring + randomized surprises), idea parking lot, catch-up dashboard, magic inbox (AI parse → confirm → apply → undo), brain-dump onboarding, PWA installable, Telegram notifications.
+**In (V1):** money ledger (expense / income), todos (work + personal + money), care tasks (recurring + randomized surprises), idea parking lot, catch-up dashboard, magic inbox (AI parse → confirm → apply → undo), brain-dump onboarding, PWA installable, Telegram two-way bot + notifications.
 
 **Out (V1):** multi-user, roles/policies, budgets/analytics, voice input, offline sync, native app.
+
+**Added after V1:** todo calendar + day timeline, todo detail page with rich-text notes, focus mode, per-todo timed reminders, natural-language date queries. See §9 for the current backlog.
 
 ---
 
 ## 2. Database schema
 
 ```
-users            (single seeded user; standard Breeze)
+users            (single seeded user; Fortify + passkeys/2FA from the starter kit)
 
 contacts
-  id, name, aliases (json: ["Gon Khaung","ဂွန်ခေါင်"]), created_at
+  id, name, aliases (json: ["Gon Khaung","ဂွန်ခေါင်"]), timestamps
 
 ledger_entries
   id, contact_id (nullable), direction ENUM(payable, receivable),
   title, amount_mmk BIGINT, amount_usd DECIMAL nullable,
-  status ENUM(open, paid, cancelled), due_date nullable,
-  paid_at nullable, note nullable, timestamps
+  status ENUM(open, paid, cancelled), due_date nullable [indexed],
+  paid_at nullable, note nullable, timestamps, softDeletes
 
 todos
-  id, title, bucket ENUM(work, personal, money_task),
-  status ENUM(open, done), due_date nullable,
-  done_at nullable, timestamps
+  id, title, note nullable (sanitized HTML — rich text),
+  bucket ENUM(work, personal, money_task),
+  status ENUM(open, done), focused BOOL,
+  due_date nullable [indexed], due_time TIME nullable,
+  reminded_at nullable, done_at nullable, timestamps, softDeletes
 
 care_tasks
   id, title, schedule_type ENUM(daily, weekly, random),
   time_of_day TIME nullable, weekday TINYINT nullable,
   random_min_days / random_max_days TINYINT nullable,  -- e.g. surprise every 7–20 days
-  next_run_at DATETIME, active BOOL, timestamps
+  next_run_at DATETIME, active BOOL, timestamps, softDeletes
 
 care_task_logs
-  id, care_task_id, ran_at, status ENUM(done, skipped)
+  id, care_task_id, ran_at, status ENUM(done, skipped)   -- written by care:run; not yet surfaced in UI
 
 ideas
-  id, title, note nullable, status ENUM(parked, active, dropped), timestamps
+  id, title, note nullable, status ENUM(parked, active, dropped), timestamps, softDeletes
 
 inbox_events        -- audit log of every magic-box action (powers Undo)
   id, raw_text, parsed_json JSON, applied BOOL,
+  subject_type, subject_id,     -- what the apply touched, so undo hits the exact record
   reverted_at nullable, timestamps
+
+parser_examples     -- self-learning loop; 10 most recent injected into the prompt
+  id, raw_text, corrected_json JSON, timestamps
 ```
 
-Undo = read `inbox_events.parsed_json`, apply the inverse (mark_paid → reopen, create → soft-delete). Keep it dumb and reliable.
+Undo = read `inbox_events.parsed_json`, apply the inverse (mark_paid → reopen, create → soft-delete). Keep it dumb and reliable. `parsed_json._created` records whether the apply created a record.
+
+**Schema decisions made during the build:**
+- `subject_type`/`subject_id` added to `inbox_events` — undo needs the exact target, not a re-match.
+- `due_date` cast as `date:Y-m-d`. Midnight-Yangon serialized to UTC ISO shifted edit forms a day early.
+- `todos.note` holds **HTML** from the rich-text editor, sanitized server-side (allowlist: `p br strong b em i u s ul ol li h1-h4 code pre blockquote a`). Plain text is valid too.
+- `due_date` indexes on `todos` and `ledger_entries` — every screen runs date-scoped queries.
+- **Timezone: `APP_TIMEZONE=Asia/Yangon`** (default was UTC, which put the "7 AM" digest at 1:30 PM local).
 
 ---
 
 ## 3. Routes
 
 ```
-GET  /                     Catch-up dashboard (Inertia)
-GET  /money                Ledger list
-GET  /todos                Todos list
-GET  /care                 Care tasks
-GET  /ideas                Ideas
+GET  /                          Catch-up dashboard (Inertia)
+GET  /profile                   Profile + logout + settings shortcuts
 
-POST /inbox/parse          { text } → calls Claude → returns parsed action JSON (NOT applied)
-POST /inbox/apply          { event_id or parsed payload } → applies, writes inbox_events
-POST /inbox/undo/{event}   Reverts an applied event
+POST /inbox/parse               { text } → Claude → parsed action JSON (NOT applied)
+POST /inbox/apply               { raw_text, parsed, corrected? } → applies, writes inbox_events
+POST /inbox/undo/{event}        Reverts an applied event
 
-POST /onboard/dump         { text } → Claude parses full brain dump → returns array of records
-POST /onboard/confirm      Persists the confirmed array
+GET  /onboard                   Brain-dump import screen
+POST /onboard/dump              { text } → batch parse → array of reviewable records
+POST /onboard/confirm           Persists the confirmed array
 
-PATCH /ledger/{id}/toggle  Swipe right: paid/reopen
-PATCH /todos/{id}/toggle   Swipe right: done/reopen
-DELETE (soft) on each      Swipe left
+GET  /money                     Ledger: balance tiles + urgency groups (?all_settled=1 for full history)
+POST /money  … /ledger          store / update / toggle / destroy
+
+GET  /todos                     Month calendar (?month=YYYY-MM) — per-day counts + "No date" bucket
+GET  /todos/day/{date}          Day timeline. Virtual days: "undated", "overdue"
+GET  /todos/{todo}              Detail page (rich-text notes, schedule, focus)
+POST /todos                     store
+PATCH /todos/{todo}             update
+PATCH /todos/{todo}/toggle      done/reopen (also clears focus)
+PATCH /todos/{todo}/focus       toggle single focus
+DELETE /todos/{todo}            soft delete
+
+GET  /care                      Care tasks
+POST /care  · PATCH /care/{task} · PATCH /care/{task}/toggle (pause) · DELETE /care/{task}
+
+GET  /ideas · DELETE /ideas/{idea}
 ```
 
-Two-step parse→apply is deliberate: the confirm chip in the UI sits between them.
+Two-step parse→apply is deliberate: the **editable** confirm chip sits between them. Swipe right = done/paid, swipe left = delete (todos + money).
 
 ---
 
-## 4. Parser prompt (the heart of the app)
+## 4. Parser (the heart of the app)
 
-System prompt in English, few-shot in Burmese/mixed. Send the user's **live data snapshot** (contact names + aliases, open ledger titles, open todo titles) so the model resolves against real records instead of guessing.
+System prompt in English, few-shot in Burmese/mixed. Sends a **live data snapshot** (contacts + aliases, open ledger titles, open todo titles), the **10 most recent `parser_examples`**, and the **last 5 commands from 30 minutes** (short-term memory) so the model resolves against real records and recent context.
 
-```
-SYSTEM:
-You convert one short life-management command into JSON. The user writes in
-Burmese, English, or mixed. Respond with ONLY minified JSON, no markdown.
+Config: `INBOX_PARSER=claude|fake` · model `claude-sonnet-5` · **thinking disabled** (adaptive thinking tripled latency and buried the JSON in a later content block) · single parse `max_tokens` 300, timeout 20s, 2 retries.
 
-Burmese number units: သိန်း = 100,000 · သောင်း = 10,000 · ထောင် = 1,000
-"500k" = 500,000. "7 သိန်း" = 700,000.
+### Action schema
 
-Known contacts: {{contacts_with_aliases}}
-Open payables/receivables: {{open_ledger_titles}}
-Open todos: {{open_todo_titles}}
-
-Match targets against the known lists above (fuzzy, either script).
-If nothing matches, treat as a new record.
-
-Schema:
-{"action": one of [mark_paid, add_payable, add_receivable, income_received,
-  add_todo, complete_todo, add_care_task, add_idea, unknown],
- "target": string, "amount_mmk": int|null, "due": "YYYY-MM-DD"|null,
- "bucket": "work"|"personal"|null, "confidence": 0-1}
-
-If confidence < 0.7 set action to "unknown" — the UI will ask, never guess big.
-
-EXAMPLES:
-"paid gon khaung 500k"
-→ {"action":"mark_paid","target":"Gon Khaung","amount_mmk":500000,"confidence":0.95}
-
-"cargo pro က 780k ဝင်ပြီ"
-→ {"action":"income_received","target":"Cargo Pro","amount_mmk":780000,"confidence":0.95}
-
-"ဂွန်ခေါင်ကို ၅ သိန်း ပေးပြီးပြီ"
-→ {"action":"mark_paid","target":"Gon Khaung","amount_mmk":500000,"confidence":0.9}
-
-"fb video content ပြီးပြီ"
-→ {"action":"complete_todo","target":"FB page video content","bucket":"work","confidence":0.9}
-
-"သောကြာနေ့ ပန်းစည်း ပို့ရန်"
-→ {"action":"add_care_task","target":"Send flowers","due":"{{next_friday}}","confidence":0.9}
-
-"arkar ဆီက 1 သိန်း ရစရာရှိတယ်"
-→ {"action":"add_receivable","target":"Arkar","amount_mmk":100000,"confidence":0.9}
-
-"mushroom idea မှတ်ထား"
-→ {"action":"add_idea","target":"Mushroom selling","confidence":0.9}
+```json
+{"action": "mark_paid|add_payable|add_receivable|income_received|add_todo|
+            complete_todo|add_care_task|add_idea|show_day|unknown",
+ "target": "string", "amount_mmk": "int|null", "due": "YYYY-MM-DD|null",
+ "due_time": "HH:MM|null", "bucket": "work|personal|null", "confidence": "0-1"}
 ```
 
-When you correct a wrong parse in the UI, append that pair to a
-`parser_examples` table and inject the 10 most recent into the prompt.
-The parser literally learns your phrasing over time.
+If confidence < 0.7 → `unknown`. The UI asks; never guess big.
+
+### Prompt rules that were learned the hard way
+
+Every one of these was a real bug found by dogfooding. **The lesson: rules alone don't stick — a worked example does.** Each rule below is paired with a few-shot example in the prompt.
+
+| Rule | Why |
+|---|---|
+| **Verbatim titles** — new records keep the user's exact words and script; never translate or paraphrase. Matching actions return the existing record's title. | Claude rewrote Burmese into tidy English; the user couldn't recognize his own todos. |
+| **Tense decides the action** — future (`ဝင်မယ်`, `ပေးရမယ်`) → `add_receivable`/`add_payable`; completed (`ဝင်ပြီ`, `ပေးပြီးပြီ`) → `income_received`/`mark_paid`. | `income_received` settles on apply, so expected income was created already-paid. |
+| **Times** — a clock time ≥ the current minute is **today**; only strictly-earlier rolls to tomorrow. Relative times ("in 20 mins") computed from the injected current time. | "at 3:30pm" sent at 3:29pm was silently scheduled for the next day. |
+| **Never invent dates** — no date in the text = `due: null`. | A guessed due date on money is worse than none. |
+| **`show_day`** — a question about a date ("give me todos for july 5", "မနက်ဖြန် ဘာရှိလဲ") returns that day; writes nothing. | Questions were being turned into todos. |
+
+### Batch mode (multi-line messages + brain dumps)
+
+`ClaudeParser::parseMany()` — one call for the whole text, `max_tokens` **16000** (Burmese is token-dense; 4000 truncated mid-JSON and *silently* fell back to line-by-line, masking every other batch fix). Returns a JSON array with a `raw` field per item. Extra rules:
+
+- **One object per ITEM, not per line.** Connectors (`ပီးတော့`, `ပီးရင်`, "and", "then") split into separate items — never dropped or merged.
+- **Date headers** (`မနက်ဖြန်`, `July 6 2026 Monday`) are not items; they stamp their date on every line below until the next header.
+- **Section headers** type every line below them: `ပေးစရာငွေ`/expenses → `add_payable`, `Income` → `add_receivable`, `work todos` → `add_todo` + bucket, `X အတွက်`/care → `add_care_task`, `Work idea` → `add_idea`. Bare "Name - amount" lines in a list are new records, never `mark_paid`.
+- **Date references** (`အဲ့နေ့`, "that day") resolve to the most recently mentioned date.
+- Falls back to line-by-line parsing if the batch call fails.
+
+### Self-learning
+
+Correcting a parse in the confirm chip (or Import review) posts `corrected: true`, which appends the pair to `parser_examples`. The 10 most recent are injected into every prompt. Verified live: a phrase that returned `unknown` parsed at 0.9 confidence after one correction.
 
 ---
 
-## 5. Notifications (Telegram)
+## 5. Telegram
 
-- Create bot via @BotFather, store bot token + your chat_id in `.env`.
-- `php artisan schedule:run` every minute (cron), scheduler checks `care_tasks.next_run_at`.
-- On fire: send Telegram message, log to `care_task_logs`, compute next `next_run_at`
-  (daily/weekly = fixed; random = now + rand(min_days, max_days) — keeps surprises unpredictable).
-- Morning digest 7:00 AM: today's care tasks + overdue todos + open payables. This digest
-  IS the catch-up screen pushed to you.
+**Long-polling, not webhooks** — `php artisan telegram:listen` calls `getUpdates` in a loop. There are no webhook routes; ignore any webhook-based advice.
+
+- Bot token + chat_id in `.env` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`). Messages from other chats are ignored.
+- **Any sentence** → parse → apply → reply (no confirm chip in chat; confident parses apply directly). Replies are line-broken and show 📅 date (always for money, incl. "no date") and ⏰ time so a wrong parse is caught at entry.
+- **Multi-line messages** route through batch mode (§4) and report per item (✅ applied / 🤔 skipped / ⚠️ failed).
+- **Commands** work bare or slashed, case-insensitive, exact single word only (so "today buy milk" is still a todo):
+  `today`/`tdy` · `tomorrow`/`tmr` · `yesterday` · `todobydate` (asks for a date; understands "July 6", "2026-07-06", "6.7", Burmese digits) · `care` · `idea`/`ideas` · `undo` · `start`/`help`
+- Natural-language date questions work too, via the `show_day` action.
+
+### Duplicate-reply protection (two layers)
+
+Duplicates came from **two `telegram:listen` processes** polling concurrently — long-poll hands the same update to both before either advances the offset.
+
+1. **Per-`update_id` idempotency** — `Cache::add('telegram:seen:{id}')` is atomic; only the first caller processes an update.
+2. **Single-instance guard** — heartbeat key `telegram:listen:owner` (120s TTL, refreshed each poll); a second long-running listener exits immediately. Released on clean exit so a supervisor restart reclaims at once. `--once` skips the guard so cron/tests compose.
+
+Both need an **atomic cache driver** (`database`/redis — not `file`/`array`). Still run exactly one listener (supervisor `numprocs=1`).
+
+### Scheduler (`schedule:work` locally, cron on prod)
+
+```
+care:run      everyMinute   fire due care tasks → Telegram → log → reschedule
+todos:remind  everyMinute   ⏰ ping when a timed todo reaches its due time (reminded_at guards repeats)
+digest:send   dailyAt 07:00 the catch-up screen, pushed
+```
+
+Random care tasks reschedule to `now + rand(min_days, max_days)` on every fire — the unpredictability is the feature.
+
+**Digest content:** care today · overdue (todos grouped Work/Personal/Money, capped 10) · due today · **Open (no date)** · expense/income totals + lines (capped 8). Future-dated money stays out of `/today` and appears in that day's view instead.
 
 ---
 
-## 6. Four-day plan
+## 6. UI
 
-**Day 1 — Skeleton.** Breeze + Inertia + Vue, single seeded user, mobile-first layout shell
-(bottom nav: Home / Money / Todos / Care / Ideas), PWA manifest + service worker (installable,
-no offline logic), deploy pipeline to your existing server.
-
-**Day 2 — Data + magic inbox.** Migrations/models above, ledger + todos CRUD (swipe toggle),
-`/inbox/parse` with the prompt in §4, confirm-chip UI, `/inbox/apply` + undo via inbox_events.
-
-**Day 3 — Recurrence + Telegram.** care_tasks engine, scheduler, Telegram service, random
-surprise scheduling, morning digest, brain-dump onboarding endpoint (same parser, array mode).
-
-**Day 4 — Catch-up screen + polish.** Dashboard queries (owed / incoming / today / overdue),
-empty states, Burmese font check (Noto Sans Myanmar fallback), parser_examples self-learning
-loop, deploy, install on phone, dogfood with your real list.
+- **Theme:** dark purple primary + pink secondary, `bg-gradient-brand` / `text-gradient-brand` utilities, gradient titles/CTAs/nav pill, form open/close transitions. Light + dark.
+- **Home = glance dashboard:** greeting + date · magic box · 🎯 **Focus** · ⚡ **Next up** (the next actionable todo) · 🔴 **Overdue** (capped 5 + "+N more →") · 📌 **Today** (todos + care, inline ✓, 🎯) · 💵 **Money strip** (net + due this week + overdue badge) · 🌙 **Tomorrow** peek · 💡 weekly rotating parked idea · all-clear state. Everything taps through; Home is a router, not a destination.
+- **Todos:** month calendar (per-day count badges, ✓ when all done, today in gradient) → **day timeline** with a left time gutter (timed sorted → Anytime → Done) → **detail page** (TipTap rich text, explicit Update button, green/blue/red outline actions).
+- **Focus mode:** single focus enforced server-side; pin from any day row, Home row, or the detail page. Completing or deleting clears it.
+- **Money:** balance tiles (incoming / to pay / net, color-coded) + **urgency groups** (Overdue / This week / Later / No date / Settled). Settled capped at 15 with "Show all N".
+- **Care:** full CRUD, schedule form incl. the random surprise window, pause/resume.
+- Dates/times use **VueDatePicker v14** via a shared `DateTimeField` (note: v14 renamed `.dp--theme-*` and moved time props into `time-config` — v11 docs are wrong).
+- Amounts always display as plain digits (`500,000 Ks`); spoken units (`5 သိန်း`) are input-only. Money wording is **Expense / Income** (internals stay `payable`/`receivable`).
+- Burmese: Noto Sans Myanmar in the font stack.
 
 ---
 
-## 7. Definition of done
+## 7. Definition of done — met
 
-Open the app after 3 days away → one screen tells you: who you owe, who owes you,
-what's overdue, what Kaly lay needs today. Type "paid gon khaung 500k" → confirmed
-and applied in under 5 seconds. Zero forms touched.
+Open the app after 3 days away → one screen tells you: expense, income, what's overdue, what Kaly lay needs today. Type "paid gon khaung 500k" → confirmed and applied in seconds. Zero forms touched. Plus: the same works over Telegram from anywhere.
+
+---
+
+## 8. Original four-day plan (history)
+
+**Day 1** Skeleton + PWA · **Day 2** Data + magic inbox · **Day 3** Recurrence + Telegram · **Day 4** Catch-up screen + polish.
+Delivered on schedule (Days 1–3 finished a day early); Day 4 expanded into the post-V1 work below.
+
+---
+
+## 9. Post-V1 status & backlog
+
+### Shipped after V1
+Todo calendar + day timeline · todo detail page + rich-text notes · focus mode · timed todo reminders · `show_day` queries · `/care` `/idea` `/tomorrow` `/yesterday` `/todobydate` commands · bare-word commands · purple/pink redesign · profile/logout · scalability pass (capped lists, indexes) · Telegram duplicate fix.
+
+### Operational / deploy
+- Production at `/var/www/LifeOS`. **Any deploy touching `routes/`, `config/`, or `.env` must rebuild caches** — a stale `bootstrap/cache/routes-v7.php` makes new routes 404 (this bit us on the focus route):
+  ```bash
+  git pull && composer install --no-dev -o && php artisan migrate --force
+  npm ci && npm run build
+  php artisan optimize:clear && php artisan optimize
+  php artisan queue:restart && sudo supervisorctl restart <listener>
+  ```
+- Confirm on prod: `APP_TIMEZONE=Asia/Yangon`, `CACHE_STORE=database`, exactly one `telegram:listen`.
+- Local: `php artisan schedule:work` + `php artisan telegram:listen` must be running. Restart the listener after any parser/bridge change (it holds old code in memory). Use `lifeos.test` (Herd), not `artisan serve` — that's single-threaded and blocks during a dump.
+
+### Open items
+- **Per-user Telegram token in Settings** + guided setup (BotFather → paste token → auto-detect chat_id). Token is currently `.env`-only.
+- Re-import real brain dump (data lost in the MySQL switch); set real care schedules.
+- Change seeded password (`lifeos-2026`); PWA install on phone.
+
+### Ideas parked
+Funding links (an expense knows which incomes pay for it) · per-person money page · **care done-tracking + streaks** (`care_task_logs` exists, unused — best next feature) · Telegram inline buttons ([✓ Done] [Skip]) · voice input (Claude can't take audio; needs Whisper/Google STT `my-MM` → existing parser) · web push · auto-detect care schedules from dump text (`အမြဲ`→daily, `တစ်ပတ်ခါ`→weekly, `ကြိုမပြောပဲ`→random) · queue the brain-dump parse · restyle starter-kit settings pages.
+
+---
+
+## 10. Testing
+
+118 tests (`php artisan test`). `INBOX_PARSER=fake` is pinned in `phpunit.xml` so tests never hit the paid API; `TodoReminderTest` freezes the clock at noon to avoid midnight flakes. Frontend changes: run the suite + `npm run build` — **the user tests the UI himself**, don't launch a preview browser.
