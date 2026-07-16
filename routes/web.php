@@ -20,8 +20,8 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/ledger/{entry}', [LedgerController::class, 'destroy'])->name('ledger.destroy');
 
     Route::get('/todos', [TodoController::class, 'index'])->name('todos');
-    Route::get('/todos/day/{date}', [TodoController::class, 'day'])->name('todos.day');
     Route::get('/todos/{todo}', [TodoController::class, 'show'])->whereNumber('todo')->name('todos.show');
+    Route::get('/todos/day/{date}', [TodoController::class, 'day'])->name('todos.day');
     Route::post('/todos', [TodoController::class, 'store'])->name('todos.store');
     Route::patch('/todos/{todo}/toggle', [TodoController::class, 'toggle'])->name('todos.toggle');
     Route::patch('/todos/{todo}/focus', [TodoController::class, 'focus'])->name('todos.focus');
@@ -51,4 +51,4 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('/dashboard', '/')->name('dashboard');
 });
 
-require __DIR__.'/settings.php';
+require __DIR__ . '/settings.php';
