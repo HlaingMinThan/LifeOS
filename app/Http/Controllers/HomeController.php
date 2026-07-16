@@ -21,9 +21,13 @@ class HomeController extends Controller
 
         return Inertia::render('os/Home', [
             'focus' => Todo::open()->where('focused', true)->first(),
-            'nextUp' => Todo::open()->whereDate('due_date', $today)
-                ->whereNotNull('due_time')
-                ->where('due_time', '>=', now()->format('H:i:s'))
+            // The single next thing to do: soonest today-or-later (or undated)
+            // open todo, timed before untimed, excluding the focused one.
+            'nextUp' => Todo::open()->where('focused', false)
+                ->where(fn ($q) => $q->whereNull('due_date')->orWhereDate('due_date', '>=', $today))
+                ->orderByRaw('due_date is null')
+                ->orderBy('due_date')
+                ->orderByRaw('due_time is null')
                 ->orderBy('due_time')
                 ->first(),
             'overdue' => Todo::overdue()->orderBy('due_date')->take(5)->get(),
