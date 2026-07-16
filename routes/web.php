@@ -21,8 +21,10 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/todos', [TodoController::class, 'index'])->name('todos');
     Route::get('/todos/day/{date}', [TodoController::class, 'day'])->name('todos.day');
+    Route::get('/todos/{todo}', [TodoController::class, 'show'])->whereNumber('todo')->name('todos.show');
     Route::post('/todos', [TodoController::class, 'store'])->name('todos.store');
     Route::patch('/todos/{todo}/toggle', [TodoController::class, 'toggle'])->name('todos.toggle');
+    Route::patch('/todos/{todo}/focus', [TodoController::class, 'focus'])->name('todos.focus');
     Route::patch('/todos/{todo}', [TodoController::class, 'update'])->name('todos.update');
     Route::delete('/todos/{todo}', [TodoController::class, 'destroy'])->name('todos.destroy');
 

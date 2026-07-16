@@ -11,7 +11,7 @@ class Todo extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['title', 'note', 'bucket', 'status', 'due_date', 'due_time', 'reminded_at', 'done_at'];
+    protected $fillable = ['title', 'note', 'bucket', 'status', 'focused', 'due_date', 'due_time', 'reminded_at', 'done_at'];
 
     protected function casts(): array
     {
@@ -19,6 +19,7 @@ class Todo extends Model
             // Y-m-d keeps JSON free of a midnight timestamp that shifts a
             // day when converted to UTC.
             'due_date' => 'date:Y-m-d',
+            'focused' => 'boolean',
             'reminded_at' => 'datetime',
             'done_at' => 'datetime',
         ];

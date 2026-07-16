@@ -20,6 +20,7 @@ class HomeController extends Controller
         $ideas = Idea::where('status', 'parked')->orderBy('id')->get();
 
         return Inertia::render('os/Home', [
+            'focus' => Todo::open()->where('focused', true)->first(),
             'nextUp' => Todo::open()->whereDate('due_date', $today)
                 ->whereNotNull('due_time')
                 ->where('due_time', '>=', now()->format('H:i:s'))

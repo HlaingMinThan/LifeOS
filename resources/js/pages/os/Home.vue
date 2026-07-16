@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { Check, Loader2, RotateCcw, Send, UserRound, X } from 'lucide-vue-next';
+import { Check, Loader2, RotateCcw, Send, Target, UserRound, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import { apiPost } from '@/lib/api';
@@ -26,6 +26,7 @@ type Parsed = {
 };
 
 const props = defineProps<{
+    focus: Todo | null;
     nextUp: Todo | null;
     overdue: Todo[];
     todayTodos: Todo[];
@@ -56,6 +57,9 @@ const allClear = computed(
 
 const toggleTodo = (t: Todo) =>
     router.patch(`/todos/${t.id}/toggle`, {}, { preserveScroll: true });
+const clearFocus = () => {
+    if (props.focus) router.patch(`/todos/${props.focus.id}/focus`, {}, { preserveScroll: true });
+};
 
 const ACTION_LABELS: Record<string, string> = {
     mark_paid: 'Mark paid',
@@ -288,6 +292,31 @@ function dismiss() {
     </Transition>
 
     <div class="mt-6 space-y-4">
+        <!-- 🎯 Focus: the one thing you chose to keep front and center -->
+        <section
+            v-if="focus"
+            class="rounded-2xl border-2 border-primary/50 bg-gradient-to-br from-primary/10 to-pink-500/5 p-4 shadow-md shadow-fuchsia-500/10"
+        >
+            <div class="flex items-center justify-between">
+                <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
+                    <Target class="h-3.5 w-3.5" /> Focus
+                </span>
+                <button class="text-xs text-muted-foreground" @click="clearFocus">Clear</button>
+            </div>
+            <Link :href="`/todos/${focus.id}`" class="mt-2 block">
+                <p class="text-lg font-bold leading-snug">{{ focus.title }}</p>
+                <p v-if="focus.due_time" class="mt-0.5 text-sm text-muted-foreground">
+                    ⏰ {{ formatTime(focus.due_time) }}
+                </p>
+            </Link>
+            <button
+                class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-brand py-2.5 text-sm font-semibold text-white shadow-md shadow-fuchsia-500/20 active:scale-[0.99]"
+                @click="toggleTodo(focus)"
+            >
+                <Check class="h-4 w-4" /> Mark done
+            </button>
+        </section>
+
         <!-- ⚡ Next up: the next timed thing today -->
         <section
             v-if="nextUp"

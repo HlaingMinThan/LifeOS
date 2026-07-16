@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Check, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Check, Plus, Target, Trash2 } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import SwipeRow from '@/components/SwipeRow.vue';
@@ -12,9 +12,16 @@ type Todo = {
     note: string | null;
     bucket: string;
     status: string;
+    focused: boolean;
     due_date: string | null;
     due_time: string | null;
 };
+
+/** HTML note → plain text for the one-line row preview. */
+function notePreview(html: string | null): string {
+    if (!html) return '';
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 const props = defineProps<{ date: string; todos: Todo[] }>();
 
@@ -59,7 +66,6 @@ const heading = computed(() =>
           }),
 );
 
-const editingId = ref<number | null>(null);
 const showNewForm = ref(false);
 const form = reactive({ title: '', note: '', bucket: 'personal', due_date: '', due_time: '' });
 
@@ -67,9 +73,10 @@ const toggle = (t: Todo) =>
     router.patch(`/todos/${t.id}/toggle`, {}, { preserveScroll: true });
 const remove = (t: Todo) =>
     router.delete(`/todos/${t.id}`, { preserveScroll: true });
+const focus = (t: Todo) =>
+    router.patch(`/todos/${t.id}/focus`, {}, { preserveScroll: true });
 
 function startNew() {
-    editingId.value = null;
     form.title = '';
     form.note = '';
     form.bucket = 'personal';
@@ -78,33 +85,18 @@ function startNew() {
     showNewForm.value = true;
 }
 
-function startEdit(t: Todo) {
-    showNewForm.value = false;
-    editingId.value = t.id;
-    form.title = t.title;
-    form.note = t.note ?? '';
-    form.bucket = t.bucket;
-    form.due_date = t.due_date?.slice(0, 10) ?? '';
-    form.due_time = t.due_time?.slice(0, 5) ?? '';
-}
-
 function closeForm() {
-    editingId.value = null;
     showNewForm.value = false;
 }
 
 function saveForm() {
-    const payload = {
+    router.post('/todos', {
         title: form.title,
         note: form.note || null,
         bucket: form.bucket,
         due_date: form.due_date || null,
         due_time: form.due_time || null,
-    };
-    const opts = { preserveScroll: true, onSuccess: closeForm };
-
-    if (editingId.value) router.patch(`/todos/${editingId.value}`, payload, opts);
-    else router.post('/todos', payload, opts);
+    }, { preserveScroll: true, onSuccess: closeForm });
 }
 
 // The calendar's + button lands here with ?new=1 — open the form directly.
@@ -128,7 +120,7 @@ onMounted(() => {
             </Link>
             <h1 class="text-2xl font-bold text-gradient-brand">{{ heading }}</h1>
             <p class="mt-1 text-sm text-muted-foreground">
-                Swipe right = done · swipe left = delete · ✎ to edit.
+                Swipe right = done · swipe left = delete · tap to open.
             </p>
         </div>
         <button
@@ -202,53 +194,8 @@ onMounted(() => {
             </li>
 
             <li class="pb-2">
-                <!-- Edit mode -->
-                <div
-                    v-if="editingId === t.id"
-                    class="space-y-2 rounded-xl border border-primary/40 bg-card p-3"
-                >
-                    <input
-                        v-model="form.title"
-                        type="text"
-                        class="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    />
-                    <textarea
-                        v-model="form.note"
-                        rows="2"
-                        placeholder="Details…"
-                        class="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    ></textarea>
-                    <div class="flex gap-2">
-                        <DateTimeField v-model="form.due_date" mode="date" class="flex-1" placeholder="Due date" />
-                        <DateTimeField v-model="form.due_time" mode="time" class="w-32" placeholder="Time" />
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <select
-                            v-model="form.bucket"
-                            class="flex-1 rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none"
-                        >
-                            <option value="work">Work</option>
-                            <option value="personal">Personal</option>
-                            <option value="money_task">Money</option>
-                        </select>
-                        <button
-                            class="rounded-lg bg-gradient-brand px-4 py-1.5 text-sm text-white disabled:opacity-50"
-                            :disabled="!form.title.trim()"
-                            @click="saveForm"
-                        >
-                            Save
-                        </button>
-                        <button
-                            class="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground"
-                            @click="closeForm"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Display mode: time gutter + swipeable card -->
-                <div v-else class="flex items-stretch gap-2">
+                <!-- Time gutter + swipeable card (tap body → detail) -->
+                <div class="flex items-stretch gap-2">
                     <div
                         class="flex w-14 shrink-0 items-center justify-end pr-1 text-right text-xs font-semibold tabular-nums"
                         :class="t.due_time ? 'text-primary' : 'text-muted-foreground/40'"
@@ -257,8 +204,11 @@ onMounted(() => {
                     </div>
                     <SwipeRow class="flex-1" @swipe-right="toggle(t)" @swipe-left="remove(t)">
                         <div
-                            class="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
-                            :class="{ 'opacity-50': t.status === 'done' }"
+                            class="flex items-center gap-3 rounded-xl border bg-card p-3"
+                            :class="[
+                                t.status === 'done' ? 'opacity-50' : '',
+                                t.focused ? 'border-primary/60' : 'border-border',
+                            ]"
                         >
                             <button
                                 class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
@@ -271,24 +221,31 @@ onMounted(() => {
                             >
                                 <Check class="h-4 w-4" />
                             </button>
-                            <div class="min-w-0 flex-1">
+                            <Link :href="`/todos/${t.id}`" class="min-w-0 flex-1">
                                 <p
                                     class="truncate text-sm font-medium"
                                     :class="{ 'line-through': t.status === 'done' }"
                                 >
-                                    {{ t.title }}
+                                    <Target
+                                        v-if="t.focused"
+                                        class="mr-1 inline h-3.5 w-3.5 text-primary"
+                                    />{{ t.title }}
                                 </p>
-                                <p v-if="t.note" class="truncate text-xs text-muted-foreground">
-                                    {{ t.note }}
+                                <p v-if="notePreview(t.note)" class="truncate text-xs text-muted-foreground">
+                                    {{ notePreview(t.note) }}
                                 </p>
                                 <span
                                     class="mt-0.5 inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
                                 >
                                     {{ BUCKETS[t.bucket] }}
                                 </span>
-                            </div>
-                            <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(t)">
-                                <Pencil class="h-4 w-4" />
+                            </Link>
+                            <button
+                                class="shrink-0 p-2"
+                                :class="t.focused ? 'text-primary' : 'text-muted-foreground/60'"
+                                @click="focus(t)"
+                            >
+                                <Target class="h-4 w-4" />
                             </button>
                             <button class="shrink-0 p-2 text-muted-foreground/60" @click="remove(t)">
                                 <Trash2 class="h-4 w-4" />
