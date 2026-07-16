@@ -11,6 +11,7 @@ type Todo = {
     title: string;
     bucket: string;
     status: string;
+    focused: boolean;
     due_date: string | null;
     due_time: string | null;
 };
@@ -60,6 +61,8 @@ const toggleTodo = (t: Todo) =>
 const clearFocus = () => {
     if (props.focus) router.patch(`/todos/${props.focus.id}/focus`, {}, { preserveScroll: true });
 };
+const setFocus = (t: Todo) =>
+    router.patch(`/todos/${t.id}/focus`, {}, { preserveScroll: true });
 
 const ACTION_LABELS: Record<string, string> = {
     mark_paid: 'Mark paid',
@@ -351,7 +354,14 @@ function dismiss() {
                     >
                         <Check class="h-3.5 w-3.5" />
                     </button>
-                    <span class="min-w-0 flex-1 truncate">{{ t.title }}</span>
+                    <Link :href="`/todos/${t.id}`" class="min-w-0 flex-1 truncate">{{ t.title }}</Link>
+                    <button
+                        class="shrink-0 p-1"
+                        :class="t.focused ? 'text-primary' : 'text-muted-foreground/50'"
+                        @click="setFocus(t)"
+                    >
+                        <Target class="h-4 w-4" />
+                    </button>
                     <span class="shrink-0 text-xs text-red-500">{{ formatDate(t.due_date) }}</span>
                 </li>
             </ul>
@@ -394,6 +404,14 @@ function dismiss() {
                         >
                             {{ t.title }}
                         </span>
+                        <button
+                            v-if="t.status !== 'done'"
+                            class="shrink-0 p-1"
+                            :class="t.focused ? 'text-primary' : 'text-muted-foreground/50'"
+                            @click.prevent.stop="setFocus(t)"
+                        >
+                            <Target class="h-4 w-4" />
+                        </button>
                         <span v-if="t.due_time" class="shrink-0 text-xs text-muted-foreground">
                             {{ formatTime(t.due_time) }}
                         </span>
