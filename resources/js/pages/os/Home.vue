@@ -30,6 +30,7 @@ const props = defineProps<{
     focus: Todo | null;
     nextUp: Todo | null;
     overdue: Todo[];
+    overdueCount: number;
     todayTodos: Todo[];
     careToday: CareTask[];
     money: { incoming: number; toPay: number; dueThisWeek: number; overdue: number };
@@ -345,7 +346,7 @@ function dismiss() {
             v-if="overdue.length"
             class="rounded-xl border border-red-500/40 bg-red-500/5 p-4"
         >
-            <h2 class="text-sm font-semibold text-red-500">🔴 Overdue ({{ overdue.length }})</h2>
+            <h2 class="text-sm font-semibold text-red-500">🔴 Overdue ({{ overdueCount }})</h2>
             <ul class="mt-2 divide-y divide-border">
                 <li v-for="t in overdue" :key="t.id" class="flex items-center gap-2 py-2 text-sm">
                     <button
@@ -365,6 +366,13 @@ function dismiss() {
                     <span class="shrink-0 text-xs text-red-500">{{ formatDate(t.due_date) }}</span>
                 </li>
             </ul>
+            <Link
+                v-if="overdueCount > overdue.length"
+                href="/todos/day/overdue"
+                class="mt-2 block text-center text-xs font-medium text-red-500"
+            >
+                +{{ overdueCount - overdue.length }} more overdue →
+            </Link>
         </section>
 
         <!-- 📌 Today -->

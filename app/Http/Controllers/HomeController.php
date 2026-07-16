@@ -26,7 +26,8 @@ class HomeController extends Controller
                 ->where('due_time', '>=', now()->format('H:i:s'))
                 ->orderBy('due_time')
                 ->first(),
-            'overdue' => Todo::overdue()->orderBy('due_date')->get(),
+            'overdue' => Todo::overdue()->orderBy('due_date')->take(5)->get(),
+            'overdueCount' => Todo::overdue()->count(),
             'todayTodos' => Todo::whereDate('due_date', $today)
                 ->orderByRaw("status = 'open' desc")
                 ->orderByRaw('due_time is null')

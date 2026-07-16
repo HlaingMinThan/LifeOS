@@ -34,14 +34,17 @@ class TodoController extends Controller
         ]);
     }
 
-    /** One day's todos ("undated" is the dateless bucket). */
+    /** One day's todos. "undated" = dateless bucket, "overdue" = all past-due open. */
     public function day(string $date): Response
     {
-        $todos = Todo::orderByRaw("status = 'open' desc")->latest();
+        $todos = Todo::latest();
 
-        $todos = $date === 'undated'
-            ? $todos->whereNull('due_date')
-            : $todos->whereDate('due_date', now()->parse($date)->toDateString());
+        $todos = match ($date) {
+            'undated' => $todos->orderByRaw("status = 'open' desc")->whereNull('due_date'),
+            'overdue' => $todos->overdue()->orderBy('due_date'),
+            default => $todos->orderByRaw("status = 'open' desc")
+                ->whereDate('due_date', now()->parse($date)->toDateString()),
+        };
 
         return Inertia::render('os/TodoDay', [
             'date' => $date,

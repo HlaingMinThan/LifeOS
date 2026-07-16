@@ -54,17 +54,18 @@ function sectionBreak(index: number): string | null {
     return null;
 }
 
-const isUndated = computed(() => props.date === 'undated');
-const heading = computed(() =>
-    isUndated.value
-        ? 'No date'
-        : new Date(props.date).toLocaleDateString('en-GB', {
-              weekday: 'short',
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-          }),
-);
+// Special virtual "days": the dateless bucket and the overdue rollup.
+const isRealDate = computed(() => /^\d{4}-\d{2}-\d{2}$/.test(props.date));
+const heading = computed(() => {
+    if (props.date === 'undated') return 'No date';
+    if (props.date === 'overdue') return '🔴 Overdue';
+    return new Date(props.date).toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    });
+});
 
 const showNewForm = ref(false);
 const form = reactive({ title: '', note: '', bucket: 'personal', due_date: '', due_time: '' });
@@ -80,7 +81,7 @@ function startNew() {
     form.title = '';
     form.note = '';
     form.bucket = 'personal';
-    form.due_date = isUndated.value ? '' : props.date;
+    form.due_date = isRealDate.value ? props.date : '';
     form.due_time = '';
     showNewForm.value = true;
 }

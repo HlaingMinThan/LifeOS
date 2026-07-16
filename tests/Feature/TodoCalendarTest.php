@@ -68,6 +68,22 @@ class TodoCalendarTest extends TestCase
                 ->where('todos.0.title', 'floating task'));
     }
 
+    public function test_overdue_day_view_lists_all_past_due_open_todos(): void
+    {
+        Todo::factory()->create(['title' => 'late one', 'due_date' => today()->subDays(3)]);
+        Todo::factory()->create(['title' => 'late two', 'due_date' => today()->subDay()]);
+        Todo::factory()->done()->create(['title' => 'late but done', 'due_date' => today()->subDay()]);
+        Todo::factory()->create(['title' => 'future', 'due_date' => today()->addDay()]);
+
+        $this->actingAs($this->user)
+            ->get('/todos/day/overdue')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('os/TodoDay')
+                ->where('date', 'overdue')
+                ->has('todos', 2));
+    }
+
     public function test_invalid_month_falls_back_to_current(): void
     {
         $this->actingAs($this->user)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Check, Target, Trash2 } from 'lucide-vue-next';
-import { reactive } from 'vue';
+import { ArrowLeft, Check, Save, Target, Trash2 } from 'lucide-vue-next';
+import { computed, reactive } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import RichEditor from '@/components/RichEditor.vue';
 
@@ -18,12 +18,25 @@ type Todo = {
 
 const props = defineProps<{ todo: Todo }>();
 
-const form = reactive({
+const initial = () => ({
     title: props.todo.title,
     note: props.todo.note,
     bucket: props.todo.bucket,
     due_date: props.todo.due_date?.slice(0, 10) ?? '',
     due_time: props.todo.due_time?.slice(0, 5) ?? '',
+});
+const form = reactive(initial());
+
+// Enable the Update button only when something actually changed.
+const dirty = computed(() => {
+    const i = initial();
+    return (
+        form.title !== i.title ||
+        (form.note ?? '') !== (i.note ?? '') ||
+        form.bucket !== i.bucket ||
+        form.due_date !== i.due_date ||
+        form.due_time !== i.due_time
+    );
 });
 
 function save() {
@@ -58,17 +71,16 @@ const backHref = props.todo.due_date
         v-model="form.title"
         type="text"
         class="w-full rounded-lg border border-transparent bg-transparent text-2xl font-bold text-gradient-brand outline-none focus:border-input focus:bg-card focus:px-2"
-        @blur="save"
     />
 
     <!-- Status + focus + delete -->
     <div class="mt-3 flex items-center gap-2">
         <button
-            class="flex flex-1 items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium"
+            class="flex flex-1 items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors"
             :class="
                 todo.status === 'done'
-                    ? 'border-green-500/40 bg-green-500/10 text-green-500'
-                    : 'border-border text-muted-foreground'
+                    ? 'border-green-500 bg-green-500/15 text-green-600 dark:text-green-400'
+                    : 'border-green-500/50 text-green-600 hover:bg-green-500/10 dark:text-green-400'
             "
             @click="toggleDone"
         >
@@ -76,11 +88,11 @@ const backHref = props.todo.due_date
             {{ todo.status === 'done' ? 'Done' : 'Mark done' }}
         </button>
         <button
-            class="flex items-center justify-center gap-1 rounded-lg border px-3 py-2 text-sm font-medium"
+            class="flex items-center justify-center gap-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
             :class="
                 todo.focused
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-muted-foreground'
+                    ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                    : 'border-blue-500/50 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400'
             "
             @click="toggleFocus"
         >
@@ -88,7 +100,7 @@ const backHref = props.todo.due_date
             {{ todo.focused ? 'Focused' : 'Focus' }}
         </button>
         <button
-            class="flex h-10 w-10 items-center justify-center rounded-lg border border-border text-muted-foreground"
+            class="flex h-10 w-10 items-center justify-center rounded-lg border border-red-500/40 text-red-500 transition-colors hover:bg-red-500/10"
             @click="remove"
         >
             <Trash2 class="h-4 w-4" />
@@ -99,7 +111,7 @@ const backHref = props.todo.due_date
     <label class="mt-5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Description
     </label>
-    <div class="mt-1" @focusout="save">
+    <div class="mt-1">
         <RichEditor v-model="form.note" />
     </div>
 
@@ -108,16 +120,24 @@ const backHref = props.todo.due_date
         Schedule
     </label>
     <div class="mt-1 flex gap-2">
-        <DateTimeField v-model="form.due_date" mode="date" class="flex-1" placeholder="Due date" @update:modelValue="save" />
-        <DateTimeField v-model="form.due_time" mode="time" class="w-32" placeholder="Time" @update:modelValue="save" />
+        <DateTimeField v-model="form.due_date" mode="date" class="flex-1" placeholder="Due date" />
+        <DateTimeField v-model="form.due_time" mode="time" class="w-32" placeholder="Time" />
     </div>
     <select
         v-model="form.bucket"
         class="mt-2 w-full rounded-lg border border-input bg-card px-2 py-2 text-sm outline-none"
-        @change="save"
     >
         <option value="work">Work</option>
         <option value="personal">Personal</option>
         <option value="money_task">Money</option>
     </select>
+
+    <!-- Explicit save -->
+    <button
+        class="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-brand py-3 text-sm font-semibold text-white shadow-md shadow-fuchsia-500/20 transition-opacity active:scale-[0.99] disabled:opacity-40"
+        :disabled="!dirty || !form.title.trim()"
+        @click="save"
+    >
+        <Save class="h-4 w-4" /> {{ dirty ? 'Update' : 'Saved' }}
+    </button>
 </template>
