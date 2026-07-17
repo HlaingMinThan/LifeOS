@@ -17,7 +17,7 @@ Input philosophy: one magic text box (typed, Burmese/English/mixed) parsed by Cl
 
 **Out (V1):** multi-user, roles/policies, budgets/analytics, voice input, offline sync, native app.
 
-**Added after V1:** todo calendar + day timeline, todo detail page with rich-text notes, focus mode, per-todo timed reminders, natural-language date queries, **multi-user + per-user Telegram bots** (§11). See §9 for the current backlog.
+**Added after V1:** todo calendar + day timeline, todo detail page with rich-text notes, focus mode, per-todo timed reminders, natural-language date queries, **multi-user + per-user Telegram bots** (§11), **PWA Web Push notifications** (§12). See §9 for the current backlog.
 
 ---
 
@@ -356,3 +356,43 @@ long-running poller) is removed entirely on prod, and it is **not** replaced by 
 
 The connected card at Settings → Telegram shows each bot's real webhook state (from `getWebhookInfo`)
 with a Register/Re-register button, so "Connected" can no longer claim a dead bot works.
+
+---
+
+## 12. PWA Web Push notifications (July 17)
+
+Every proactive Telegram push — 7 AM digest, timed todo reminders, care-task fires — now **also**
+sends a Web Push notification from Life OS itself, so the user is alerted in the app even when it is
+backgrounded or closed. Both channels fire; the push does not replace Telegram.
+
+**Deliberately no custom sound.** Custom notification sounds work only while a page is focused and are
+impossible on background web push (iOS ignores them; Android dropped support). Using the OS default
+sound makes this plain Web Push that works in every app state, which is what the user chose after we
+walked through the trade-off.
+
+### How it works
+- **`laravel-notification-channels/webpush`** (`User` is `Notifiable` + `HasPushSubscriptions`).
+  Provides the `push_subscriptions` table, VAPID handling, and 410-Gone cleanup.
+- **`App\Notifications\BotPush`** — `webpush` channel only — is fired via `$user->notify(...)` right
+  after the `->send()` in `RunTodoReminders`, `RunCareTasks`, `SendMorningDigest`. No-ops when the
+  user has no subscription, so it is safe for everyone.
+- **`public/sw.js`** gained `push` (→ `showNotification`, OS sound, every state) and `notificationclick`
+  (→ focus/open the app) handlers. Still installability + passthrough otherwise.
+- **`PushSubscriptionController`** (`POST`/`DELETE /push/subscribe`) stores/removes a browser's
+  subscription, scoped through `$request->user()`. The VAPID **public** key is shared to the client
+  via `HandleInertiaRequests` (`vapidPublicKey`); the private key never leaves the server.
+- **Client:** `resources/js/lib/pushNotifications.ts` (`enablePush`/`disablePush`, permission +
+  subscribe + POST). Settings → Notifications (`os/Notifications.vue`, mobile shell, Profile menu) is
+  a single enable/disable toggle with an **iOS "install to Home Screen first"** hint. A dismissible
+  Home nudge (`showNotificationPrompt`) mirrors the Telegram one, shown until a device subscribes or
+  the user taps Not now.
+
+### Landmines
+- **iOS:** Web Push works only for an **installed** PWA (Add to Home Screen, iOS 16.4+); the prompt is
+  a no-op in a plain Safari tab. The settings page shows the install hint.
+- **VAPID keys are per-environment and must stay stable** — regenerating invalidates every existing
+  subscription. Deploy sets `VAPID_SUBJECT`/`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`; run
+  `php artisan webpush:vapid` once on prod and keep them. Web Push needs HTTPS (prod/localhost qualify).
+- **A running Vite dev server makes Inertia SSR issue an HTTP request** to `:5173/__inertia_ssr` during
+  a full page render. A bare `Http::assertNothingSent()` in a test that renders an Inertia page will
+  catch it — assert about the specific host (`api.telegram.org`) instead.

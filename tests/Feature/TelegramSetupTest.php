@@ -258,8 +258,10 @@ class TelegramSetupTest extends TestCase
         $this->actingAs($user)->get('/settings/telegram')
             ->assertInertia(fn ($page) => $page->where('webhook', null));
 
-        // A poller env must not phone Telegram just to render settings.
-        Http::assertNothingSent();
+        // A poller env must not phone Telegram just to render settings. (Assert
+        // specifically about Telegram — a running Vite dev server adds an
+        // unrelated Inertia SSR request that a bare assertNothingSent would catch.)
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'api.telegram.org'));
     }
 
     public function test_register_webhook_button_sets_the_webhook(): void

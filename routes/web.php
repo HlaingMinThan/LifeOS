@@ -6,6 +6,7 @@ use App\Http\Controllers\IdeaController;
 use App\Http\Controllers\InboxController;
 use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\OnboardController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TodoController;
 use Illuminate\Support\Facades\Route;
@@ -53,6 +54,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/inbox/parse', [InboxController::class, 'parse'])->name('inbox.parse');
     Route::post('/inbox/apply', [InboxController::class, 'apply'])->name('inbox.apply');
     Route::post('/inbox/undo/{event}', [InboxController::class, 'undo'])->name('inbox.undo');
+
+    // PWA push: a browser stores/removes its Web Push subscription here.
+    Route::post('/push/subscribe', [PushSubscriptionController::class, 'store'])->name('push.subscribe');
+    Route::delete('/push/subscribe', [PushSubscriptionController::class, 'destroy'])->name('push.unsubscribe');
 
     // Starter-kit pages still link to the dashboard route.
     Route::redirect('/dashboard', '/')->name('dashboard');

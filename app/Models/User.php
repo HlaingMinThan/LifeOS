@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
+use NotificationChannels\WebPush\HasPushSubscriptions;
 
 /**
  * @property int $id
@@ -31,6 +32,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string|null $telegram_webhook_secret
  * @property Carbon|null $telegram_linked_at
  * @property Carbon|null $telegram_prompt_dismissed_at
+ * @property Carbon|null $notification_prompt_dismissed_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -44,7 +46,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 class User extends Authenticatable implements PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+    use HasFactory, HasPushSubscriptions, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
     /**
      * Get the attributes that should be cast.
@@ -60,6 +62,7 @@ class User extends Authenticatable implements PasskeyUser
             'telegram_bot_token' => 'encrypted',
             'telegram_linked_at' => 'datetime',
             'telegram_prompt_dismissed_at' => 'datetime',
+            'notification_prompt_dismissed_at' => 'datetime',
         ];
     }
 

@@ -57,6 +57,9 @@ class HomeController extends Controller
             // Telegram is optional: nudge once, and never again after "Not now".
             'showTelegramPrompt' => ! $user->hasTelegram()
                 && ! $user->telegram_prompt_dismissed_at,
+            // Same for PWA push: nudge until a device subscribes or they dismiss.
+            'showNotificationPrompt' => ! $user->pushSubscriptions()->exists()
+                && ! $user->notification_prompt_dismissed_at,
         ]);
     }
 }

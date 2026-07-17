@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\CareTask;
+use App\Notifications\BotPush;
 use App\Services\Telegram\TelegramClient;
 use Illuminate\Console\Command;
 
@@ -23,6 +24,8 @@ class RunCareTasks extends Command
 
         foreach ($due as $task) {
             $telegram->forUser($task->user)->send("💗 {$task->title}");
+            // Mirror the Telegram nudge as a PWA push (no-op without a subscription).
+            $task->user->notify(new BotPush("💗 {$task->title}"));
 
             $task->logs()->create(['ran_at' => now(), 'status' => 'done']);
 

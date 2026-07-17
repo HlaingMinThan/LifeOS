@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Notifications\BotPush;
 use App\Services\DigestBuilder;
 use App\Services\Telegram\TelegramClient;
 use Illuminate\Console\Command;
@@ -25,6 +26,7 @@ class SendMorningDigest extends Command
             $text = $digest->build($user);
 
             $telegram->forUser($user)->send($text);
+            $user->notify(new BotPush('🌅 Morning digest', 'Your day at a glance — tap to open Life OS.'));
             $this->line("— {$user->email} —");
             $this->line($text);
         }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\NotificationController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\TelegramController;
@@ -26,6 +27,11 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('settings/telegram', [TelegramController::class, 'destroy'])->name('telegram.destroy');
     Route::patch('settings/telegram/dismiss', [TelegramController::class, 'dismissPrompt'])
         ->name('telegram.dismiss');
+
+    // PWA push notifications (enable/disable is client-side; this hosts it).
+    Route::get('settings/notifications', [NotificationController::class, 'edit'])->name('notifications.edit');
+    Route::patch('settings/notifications/dismiss', [NotificationController::class, 'dismissPrompt'])
+        ->name('notifications.dismiss');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

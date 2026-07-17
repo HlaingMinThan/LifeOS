@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\Todo;
+use App\Notifications\BotPush;
 use App\Services\Telegram\TelegramClient;
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 
 class RunTodoReminders extends Command
 {
@@ -26,6 +28,11 @@ class RunTodoReminders extends Command
             }
 
             $telegram->forUser($todo->user)->send($message);
+            // note is sanitized HTML; the push body wants plain text.
+            $todo->user->notify(new BotPush(
+                "⏰ {$todo->title}",
+                $todo->note ? Str::limit(strip_tags($todo->note), 120) : null,
+            ));
             $todo->update(['reminded_at' => now()]);
 
             $this->info("Reminded: {$todo->title}");

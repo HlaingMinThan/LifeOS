@@ -41,6 +41,9 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            // The client needs this to subscribe to Web Push. Public key only —
+            // the private key never leaves the server.
+            'vapidPublicKey' => config('webpush.vapid.public_key'),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
