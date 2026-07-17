@@ -7,6 +7,7 @@ use App\Notifications\BotPush;
 use App\Services\Telegram\TelegramClient;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
+use Throwable;
 
 class RunTodoReminders extends Command
 {
@@ -28,12 +29,20 @@ class RunTodoReminders extends Command
             }
 
             $telegram->forUser($todo->user)->send($message);
-            // note is sanitized HTML; the push body wants plain text.
-            $todo->user->notify(new BotPush(
-                "⏰ {$todo->title}",
-                $todo->note ? Str::limit(strip_tags($todo->note), 120) : null,
-            ));
+            // Mark reminded BEFORE the push: a failing push must never leave the
+            // guard unset, or the reminder re-fires every minute.
             $todo->update(['reminded_at' => now()]);
+
+            // The PWA push is best-effort — it rides alongside Telegram and must
+            // not disrupt the core flow if a subscription/endpoint misbehaves.
+            try {
+                $todo->user->notify(new BotPush(
+                    "⏰ {$todo->title}",
+                    $todo->note ? Str::limit(strip_tags($todo->note), 120) : null,
+                ));
+            } catch (Throwable $e) {
+                report($e);
+            }
 
             $this->info("Reminded: {$todo->title}");
         }

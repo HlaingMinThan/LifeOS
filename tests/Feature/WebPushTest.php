@@ -41,6 +41,47 @@ class WebPushTest extends TestCase
         Notification::assertSentTo($this->user, BotPush::class);
     }
 
+    /** Force the push channel to blow up, reproducing the missing-VAPID prod bug. */
+    private function makePushThrow(): void
+    {
+        $this->app->bind(WebPushChannel::class, fn () => new class
+        {
+            public function send(mixed $notifiable, mixed $notification): void
+            {
+                throw new \RuntimeException('push boom');
+            }
+        });
+    }
+
+    public function test_reminder_marks_reminded_even_when_the_push_fails(): void
+    {
+        $this->travelTo(now()->setTime(12, 0));
+        $this->makePushThrow();
+        $todo = Todo::factory()->for($this->user)->create([
+            'title' => 'take medicine',
+            'due_date' => today(),
+            'due_time' => now()->subMinute()->format('H:i:s'),
+        ]);
+
+        // A thrown push must not abort the command…
+        $this->artisan('todos:remind')->assertSuccessful();
+
+        // …nor leave the guard unset, or it re-fires every minute (the bug).
+        $this->assertNotNull($todo->fresh()->reminded_at);
+    }
+
+    public function test_care_task_reschedules_even_when_the_push_fails(): void
+    {
+        $this->makePushThrow();
+        $task = CareTask::factory()->for($this->user)->create([
+            'title' => 'water plants', 'next_run_at' => now()->subMinute(),
+        ]);
+
+        $this->artisan('care:run')->assertSuccessful();
+
+        $this->assertTrue($task->fresh()->next_run_at->isFuture());
+    }
+
     public function test_todo_reminder_also_pushes(): void
     {
         $this->travelTo(now()->setTime(12, 0));

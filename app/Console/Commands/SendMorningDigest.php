@@ -7,6 +7,7 @@ use App\Notifications\BotPush;
 use App\Services\DigestBuilder;
 use App\Services\Telegram\TelegramClient;
 use Illuminate\Console\Command;
+use Throwable;
 
 class SendMorningDigest extends Command
 {
@@ -26,7 +27,12 @@ class SendMorningDigest extends Command
             $text = $digest->build($user);
 
             $telegram->forUser($user)->send($text);
-            $user->notify(new BotPush('🌅 Morning digest', 'Your day at a glance — tap to open Life OS.'));
+            // Best-effort push: one user's bad subscription must not abort the loop.
+            try {
+                $user->notify(new BotPush('🌅 Morning digest', 'Your day at a glance — tap to open Life OS.'));
+            } catch (Throwable $e) {
+                report($e);
+            }
             $this->line("— {$user->email} —");
             $this->line($text);
         }

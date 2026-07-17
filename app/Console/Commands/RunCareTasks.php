@@ -6,6 +6,7 @@ use App\Models\CareTask;
 use App\Notifications\BotPush;
 use App\Services\Telegram\TelegramClient;
 use Illuminate\Console\Command;
+use Throwable;
 
 class RunCareTasks extends Command
 {
@@ -24,14 +25,20 @@ class RunCareTasks extends Command
 
         foreach ($due as $task) {
             $telegram->forUser($task->user)->send("💗 {$task->title}");
-            // Mirror the Telegram nudge as a PWA push (no-op without a subscription).
-            $task->user->notify(new BotPush("💗 {$task->title}"));
 
             $task->logs()->create(['ran_at' => now(), 'status' => 'done']);
 
-            // daily/weekly land on a fixed slot; random picks a fresh
-            // offset each time — that keeps surprises unpredictable.
+            // Reschedule BEFORE the push: a failing push must never leave the
+            // task on its old slot, or it re-fires every minute. daily/weekly
+            // land on a fixed slot; random picks a fresh offset each time.
             $task->update(['next_run_at' => $task->nextRunAfter(now())]);
+
+            // Best-effort PWA push alongside Telegram — never disrupts the flow.
+            try {
+                $task->user->notify(new BotPush("💗 {$task->title}"));
+            } catch (Throwable $e) {
+                report($e);
+            }
 
             $this->info("Fired: {$task->title} → next {$task->next_run_at}");
         }
