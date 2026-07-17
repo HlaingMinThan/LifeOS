@@ -498,16 +498,18 @@ function dismiss() {
             class="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4"
         >
             <span class="text-lg">⚡</span>
-            <div class="min-w-0 flex-1">
+            <Link :href="`/todos/${nextUp.id}`" class="block min-w-0 flex-1">
                 <p
                     class="text-xs font-medium tracking-wide text-primary uppercase"
                 >
                     Next up
                 </p>
                 <p class="mt-0.5 truncate text-sm font-medium">
-                    ⏰ {{ formatTime(nextUp.due_time) }} — {{ nextUp.title }}
+                    <template v-if="nextUp.due_time"
+                        >⏰ {{ formatTime(nextUp.due_time) }} — </template
+                    >{{ nextUp.title }}
                 </p>
-            </div>
+            </Link>
             <button
                 class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground"
                 @click="toggleTodo(nextUp)"
