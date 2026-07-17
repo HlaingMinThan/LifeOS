@@ -334,5 +334,25 @@ into the first user's ledger. Scoping the data was the prerequisite, not a follo
   each other's question. Keyed per user now.
 - **Deploy must rebuild caches** (§9) — new routes plus a changed `bootstrap/app.php`. A stale
   `bootstrap/cache/routes-v7.php` 404s the webhook exactly like it did the focus route.
-- **Prod cutover:** deploy → migrate (moves the `.env` bot onto user 1, so the live bot survives) →
-  visit Settings → Telegram once to register the webhook → then stop the prod `telegram:listen`.
+
+### Prod cutover
+
+Webhooks are *push*: once registered, Telegram POSTs to `/telegram/webhook/{secret}` and your web
+server handles it like any request. There is **no delivery process** — `telegram:listen` (a
+long-running poller) is removed entirely on prod, and it is **not** replaced by a cron.
+`telegram:webhook-sync` is a one-time registration step, not a scheduled job. The scheduler cron
+(`care:run`, `todos:remind`, `digest:send`) is unchanged.
+
+1. **Check the owner first.** The migration backfills every existing row to the *lowest-id* account
+   (`DB::table('users')->orderBy('id')->value('id')`). Registration is open, so confirm that account
+   is actually the intended owner — `select id, email, created_at from users order by id limit 1` —
+   before migrating. If it is not, the data attaches to the wrong person.
+2. Back up the prod DB.
+3. Deploy → `php artisan migrate --force` (data auto-assigns; moves the `.env` bot onto that account
+   so the live bot survives) → `php artisan optimize:clear && php artisan optimize`.
+4. `php artisan telegram:webhook-sync` — registers the webhook for every connected bot (idempotent;
+   also the standing fix whenever a webhook breaks or the domain changes).
+5. Only now **remove `telegram:listen` from supervisor** — delivery is the webhook from here on.
+
+The connected card at Settings → Telegram shows each bot's real webhook state (from `getWebhookInfo`)
+with a Register/Re-register button, so "Connected" can no longer claim a dead bot works.

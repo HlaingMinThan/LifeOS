@@ -9,6 +9,7 @@ const props = defineProps<{
     chatId: string | null;
     linkedAt: string | null;
     usesWebhook: boolean;
+    webhook: { registered: boolean; error: string | null } | null;
 }>();
 
 // Three states, in order: no token → token but no chat → connected.
@@ -31,6 +32,7 @@ const botLink = computed(() =>
 const tokenForm = useForm({ token: '' });
 const detectForm = useForm({});
 const disconnectForm = useForm({});
+const webhookForm = useForm({});
 
 const saveToken = () =>
     tokenForm.post('/settings/telegram/token', { preserveScroll: true });
@@ -38,6 +40,14 @@ const detect = () =>
     detectForm.post('/settings/telegram/detect', { preserveScroll: true });
 const disconnect = () =>
     disconnectForm.delete('/settings/telegram', { preserveScroll: true });
+const registerWebhook = () =>
+    webhookForm.post('/settings/telegram/webhook', { preserveScroll: true });
+
+// Delivery is healthy only when a webhook is registered here AND Telegram
+// reports no recent delivery error. Poller environments have no webhook to check.
+const webhookHealthy = computed(
+    () => props.webhook?.registered && !props.webhook.error,
+);
 </script>
 
 <template>
@@ -83,6 +93,7 @@ const disconnect = () =>
                 <code class="rounded bg-muted px-1">today</code>.
             </p>
 
+            <!-- Poller environment: no webhook exists, delivery is a process. -->
             <p
                 v-if="!usesWebhook"
                 class="mt-2 border-t border-border pt-2 text-xs text-muted-foreground"
@@ -93,6 +104,44 @@ const disconnect = () =>
                 >
                 running.
             </p>
+
+            <!-- Webhook environment: show the real registration state, not a guess. -->
+            <div v-else class="mt-2 border-t border-border pt-2">
+                <p v-if="webhookHealthy" class="text-xs text-muted-foreground">
+                    Delivery: webhook active.
+                </p>
+
+                <template v-else>
+                    <p class="text-xs text-amber-500">
+                        <template v-if="webhook?.error">
+                            Last delivery error: {{ webhook.error }}
+                        </template>
+                        <template v-else>
+                            Webhook not registered — messages won't reach Life
+                            OS yet.
+                        </template>
+                    </p>
+                    <p
+                        v-if="webhookForm.errors.webhook"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ webhookForm.errors.webhook }}
+                    </p>
+                    <button
+                        class="bg-gradient-brand mt-2 rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                        :disabled="webhookForm.processing"
+                        @click="registerWebhook"
+                    >
+                        {{
+                            webhookForm.processing
+                                ? 'Registering…'
+                                : webhook?.error
+                                  ? 'Re-register webhook'
+                                  : 'Register webhook'
+                        }}
+                    </button>
+                </template>
+            </div>
         </div>
 
         <button

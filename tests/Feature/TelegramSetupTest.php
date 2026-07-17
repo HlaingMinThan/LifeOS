@@ -218,4 +218,85 @@ class TelegramSetupTest extends TestCase
         $this->actingAs($connected)->get('/')
             ->assertInertia(fn ($page) => $page->where('showTelegramPrompt', false));
     }
+
+    // --- webhook state on the connected card (the "Connected can lie" fix) ---
+
+    public function test_connected_page_reports_a_healthy_webhook(): void
+    {
+        config(['lifeos.telegram.webhook_enabled' => true]);
+        $user = User::factory()->withTelegram()->create();
+        Http::fake(['api.telegram.org/*getWebhookInfo*' => Http::response([
+            'ok' => true,
+            'result' => ['url' => route('telegram.webhook', $user->telegram_webhook_secret)],
+        ])]);
+
+        $this->actingAs($user)->get('/settings/telegram')
+            ->assertInertia(fn ($page) => $page
+                ->where('webhook.registered', true)
+                ->where('webhook.error', null));
+    }
+
+    /** The migrated-in state: token + chat, but no webhook actually points here. */
+    public function test_connected_page_flags_a_missing_webhook(): void
+    {
+        config(['lifeos.telegram.webhook_enabled' => true]);
+        $user = User::factory()->withTelegram()->create();
+        Http::fake(['api.telegram.org/*getWebhookInfo*' => Http::response([
+            'ok' => true, 'result' => ['url' => ''],
+        ])]);
+
+        $this->actingAs($user)->get('/settings/telegram')
+            ->assertInertia(fn ($page) => $page->where('webhook.registered', false));
+    }
+
+    public function test_poller_environment_reports_no_webhook_state(): void
+    {
+        config(['lifeos.telegram.webhook_enabled' => false]);
+        $user = User::factory()->withTelegram()->create();
+        Http::fake();
+
+        $this->actingAs($user)->get('/settings/telegram')
+            ->assertInertia(fn ($page) => $page->where('webhook', null));
+
+        // A poller env must not phone Telegram just to render settings.
+        Http::assertNothingSent();
+    }
+
+    public function test_register_webhook_button_sets_the_webhook(): void
+    {
+        config(['lifeos.telegram.webhook_enabled' => true]);
+        $user = User::factory()->withTelegram()->create();
+        Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+        $this->actingAs($user)->post('/settings/telegram/webhook')->assertRedirect();
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'setWebhook')
+            && $request['secret_token'] === $user->telegram_webhook_secret);
+    }
+
+    public function test_register_webhook_is_refused_in_a_poller_environment(): void
+    {
+        config(['lifeos.telegram.webhook_enabled' => false]);
+        $user = User::factory()->withTelegram()->create();
+        Http::fake();
+
+        $this->actingAs($user)
+            ->from('/settings/telegram')
+            ->post('/settings/telegram/webhook')
+            ->assertSessionHasErrors('webhook');
+
+        Http::assertNothingSent();
+    }
+
+    public function test_register_webhook_requires_a_connected_bot(): void
+    {
+        Http::fake();
+
+        $this->actingAs($this->user) // no bot
+            ->from('/settings/telegram')
+            ->post('/settings/telegram/webhook')
+            ->assertSessionHasErrors('webhook');
+
+        Http::assertNothingSent();
+    }
 }

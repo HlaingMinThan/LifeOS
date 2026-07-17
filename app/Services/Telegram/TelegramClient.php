@@ -101,6 +101,16 @@ class TelegramClient
         return Http::timeout(10)->post($this->url('deleteWebhook'))->json() ?? [];
     }
 
+    /**
+     * The bot's current webhook, from Telegram's own records — the only source
+     * of truth for whether delivery actually works. `url` empty means no
+     * webhook; `last_error_message` surfaces silent delivery failures.
+     */
+    public function getWebhookInfo(): array
+    {
+        return Http::timeout(10)->get($this->url('getWebhookInfo'))->json('result', []);
+    }
+
     private function url(string $method): string
     {
         return "https://api.telegram.org/bot{$this->token}/{$method}";

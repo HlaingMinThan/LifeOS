@@ -20,6 +20,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('settings/telegram/detect', [TelegramController::class, 'detect'])
         ->middleware('throttle:20,1')
         ->name('telegram.detect');
+    Route::post('settings/telegram/webhook', [TelegramController::class, 'registerWebhook'])
+        ->middleware('throttle:20,1')
+        ->name('telegram.webhook-register');
     Route::delete('settings/telegram', [TelegramController::class, 'destroy'])->name('telegram.destroy');
     Route::patch('settings/telegram/dismiss', [TelegramController::class, 'dismissPrompt'])
         ->name('telegram.dismiss');

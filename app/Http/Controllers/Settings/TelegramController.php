@@ -36,7 +36,32 @@ class TelegramController extends Controller
             'chatId' => $user->telegram_chat_id,
             'linkedAt' => $user->telegram_linked_at,
             'usesWebhook' => (bool) config('lifeos.telegram.webhook_enabled'),
+            // Real delivery state, so "Connected" can't claim a bot works when no
+            // webhook points here (the state a migrated-in account lands in).
+            'webhook' => $this->webhookState($user),
         ]);
+    }
+
+    /**
+     * Where Telegram is actually delivering this bot's messages, per its own
+     * records. Null when it doesn't apply (no bot, or a poller environment).
+     *
+     * @return array{registered: bool, error: string|null}|null
+     */
+    private function webhookState(User $user): ?array
+    {
+        if (! $user->hasTelegram() || ! config('lifeos.telegram.webhook_enabled')) {
+            return null;
+        }
+
+        // A slow/down Telegram degrades to "not registered" here, which only
+        // surfaces the (idempotent) Register button — never a false green.
+        $info = $this->telegram->forUser($user)->getWebhookInfo();
+
+        return [
+            'registered' => ($info['url'] ?? '') === route('telegram.webhook', $user->telegram_webhook_secret),
+            'error' => $info['last_error_message'] ?? null,
+        ];
     }
 
     /** Step 2: prove the token works, then keep it. */
@@ -136,6 +161,47 @@ class TelegramController extends Controller
         $this->telegram->forUser($user)->send(
             "✅ Life OS connected.\nSend me anything — \"paid gon khaung 500k\" — or try /today.",
         );
+
+        return back();
+    }
+
+    /**
+     * Register (or re-register) the webhook for an already-connected bot.
+     *
+     * detect() only fires for a bot mid-setup; a bot that arrived already
+     * connected (migrated in) or whose webhook broke needs this separate path,
+     * reachable from the connected card.
+     */
+    public function registerWebhook(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        if (! $user->hasTelegram()) {
+            throw ValidationException::withMessages(['webhook' => 'Connect a bot first.']);
+        }
+
+        if (! config('lifeos.telegram.webhook_enabled')) {
+            throw ValidationException::withMessages([
+                'webhook' => 'This environment delivers via the poller, not a webhook.',
+            ]);
+        }
+
+        if (blank($user->telegram_webhook_secret)) {
+            $user->forceFill(['telegram_webhook_secret' => Str::random(48)])->save();
+        }
+
+        $response = $this->telegram->forUser($user)->setWebhook(
+            route('telegram.webhook', $user->telegram_webhook_secret),
+            $user->telegram_webhook_secret,
+        );
+
+        if (! ($response['ok'] ?? false)) {
+            throw ValidationException::withMessages([
+                'webhook' => 'Telegram refused the webhook: '.($response['description'] ?? 'unknown error').'.',
+            ]);
+        }
+
+        $user->forceFill(['telegram_linked_at' => now()])->save();
 
         return back();
     }
