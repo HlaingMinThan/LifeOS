@@ -110,7 +110,16 @@ class TodoController extends Controller
 
     public function destroy(Request $request, int $todo): RedirectResponse
     {
-        $this->find($request, $todo)->delete();
+        $model = $this->find($request, $todo);
+        $model->delete();
+
+        // Deleting from the todo's own detail page: back() would return to that
+        // now-soft-deleted page and 404. Send them to the todo's day instead.
+        // Other callers (the day list) keep their place via back().
+        $refererPath = parse_url((string) $request->headers->get('referer'), PHP_URL_PATH);
+        if ($refererPath === "/todos/{$todo}") {
+            return redirect()->route('todos.day', $model->due_date?->toDateString() ?? 'undated');
+        }
 
         return back();
     }

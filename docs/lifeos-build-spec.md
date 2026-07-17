@@ -393,6 +393,12 @@ walked through the trade-off.
 - **VAPID keys are per-environment and must stay stable** — regenerating invalidates every existing
   subscription. Deploy sets `VAPID_SUBJECT`/`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`; run
   `php artisan webpush:vapid` once on prod and keep them. Web Push needs HTTPS (prod/localhost qualify).
+- **The server needs the `gmp` (or `bcmath`) PHP extension.** Without it, `minishlink/web-push`
+  emits an E_USER_NOTICE on client construction; in production Laravel turns that into a thrown
+  `ErrorException`, so every push fails — silently, because the crons catch it (Telegram still sends,
+  reminders don't repeat, no push). `tinker` masks it (Psy shows the notice as a warning, not a
+  throw), so it only bites the scheduled path. Fix: `apt-get install php8.4-gmp && systemctl restart
+  php8.4-fpm`; verify `php -m | grep gmp`. This bit prod on 2026-07-18.
 - **A running Vite dev server makes Inertia SSR issue an HTTP request** to `:5173/__inertia_ssr` during
   a full page render. A bare `Http::assertNothingSent()` in a test that renders an Inertia page will
   catch it — assert about the specific host (`api.telegram.org`) instead.
