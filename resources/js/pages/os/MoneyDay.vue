@@ -398,18 +398,19 @@ const lightboxSrc = ref<string | null>(null);
                         </button>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p class="truncate text-sm font-medium line-through">
-                                    {{ e.title }}
-                                    <span v-if="e.note" class="font-normal text-muted-foreground no-underline"> · {{ e.note }}</span>
-                                </p>
+                                <p class="truncate text-sm font-medium line-through">{{ e.title }}</p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-green-500">
                                     +{{ e.amount_mmk.toLocaleString() }}
                                 </p>
                             </div>
-                            <p class="text-xs text-muted-foreground">
+                            <p class="truncate text-xs text-muted-foreground">
                                 <span v-if="fmtTime(e.paid_at)">{{ fmtTime(e.paid_at) }}</span>
-                                <span v-if="fmtTime(e.paid_at) && e.contact && e.contact.name !== e.title"> · </span>
-                                <span v-if="e.contact && e.contact.name !== e.title">{{ e.contact.name }}</span>
+                                <template v-if="e.contact && e.contact.name !== e.title">
+                                    <span v-if="fmtTime(e.paid_at)"> · </span>{{ e.contact.name }}
+                                </template>
+                                <template v-if="e.note">
+                                    <span v-if="fmtTime(e.paid_at) || (e.contact && e.contact.name !== e.title)"> · </span>{{ e.note }}
+                                </template>
                             </p>
                         </div>
                         <img
@@ -442,18 +443,19 @@ const lightboxSrc = ref<string | null>(null);
                         </button>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p class="truncate text-sm font-medium line-through">
-                                    {{ e.title }}
-                                    <span v-if="e.note" class="font-normal text-muted-foreground no-underline"> · {{ e.note }}</span>
-                                </p>
+                                <p class="truncate text-sm font-medium line-through">{{ e.title }}</p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-rose-400">
                                     -{{ e.amount_mmk.toLocaleString() }}
                                 </p>
                             </div>
-                            <p class="text-xs text-muted-foreground">
+                            <p class="truncate text-xs text-muted-foreground">
                                 <span v-if="fmtTime(e.paid_at)">{{ fmtTime(e.paid_at) }}</span>
-                                <span v-if="fmtTime(e.paid_at) && e.contact && e.contact.name !== e.title"> · </span>
-                                <span v-if="e.contact && e.contact.name !== e.title">{{ e.contact.name }}</span>
+                                <template v-if="e.contact && e.contact.name !== e.title">
+                                    <span v-if="fmtTime(e.paid_at)"> · </span>{{ e.contact.name }}
+                                </template>
+                                <template v-if="e.note">
+                                    <span v-if="fmtTime(e.paid_at) || (e.contact && e.contact.name !== e.title)"> · </span>{{ e.note }}
+                                </template>
                             </p>
                         </div>
                         <img
