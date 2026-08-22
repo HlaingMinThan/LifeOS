@@ -98,7 +98,7 @@ class LedgerController extends Controller
         $paidOnDay = (clone $entries)->where('status', 'paid')->with('contact')
             ->whereDate('paid_at', $dateStr)->get();
 
-        $all = $dueOnDay->concat($paidOnDay)->unique('id')->sortBy('direction')->values();
+        $all = $dueOnDay->concat($paidOnDay)->unique('id')->sortBy('paid_at')->values();
 
         return Inertia::render('os/MoneyDay', [
             'date' => $date,
@@ -157,10 +157,12 @@ class LedgerController extends Controller
         }
 
         // Screenshot entries are born settled (paid immediately).
-        // Use the due_date as paid_at so it lands on the correct calendar day.
+        // Combine due_date + parsed time so entries sort chronologically.
         if ($data['image'] ?? null) {
             $data['status'] = 'paid';
-            $data['paid_at'] = $data['due_date'] ?? now();
+            $date = $data['due_date'] ?? now()->toDateString();
+            $time = $request->input('paid_time') ?? now()->format('H:i');
+            $data['paid_at'] = now()->parse("{$date} {$time}");
         }
 
         $request->user()->ledgerEntries()->create($data);

@@ -65,6 +65,13 @@ const toggle = (e: Entry) =>
 const remove = (e: Entry) =>
     router.delete(`/ledger/${e.id}`, { preserveScroll: true });
 
+function fmtTime(paidAt: string | null): string {
+    if (!paidAt) return '';
+    const d = new Date(paidAt);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
 // --- Create form ---
 const showNewForm = ref(false);
 const editingId = ref<number | null>(null);
@@ -319,7 +326,10 @@ const lightboxSrc = ref<string | null>(null);
                         </button>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p class="truncate text-sm font-medium">{{ e.title }}</p>
+                                <p class="truncate text-sm font-medium">
+                                    {{ e.title }}
+                                    <span v-if="e.note" class="font-normal text-muted-foreground"> · {{ e.note }}</span>
+                                </p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-blue-400">
                                     {{ e.amount_mmk.toLocaleString() }}
                                 </p>
@@ -327,7 +337,6 @@ const lightboxSrc = ref<string | null>(null);
                             <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
                                 {{ e.contact.name }}
                             </p>
-                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">{{ e.note }}</p>
                         </div>
                         <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(e)">
                             <Pencil class="h-4 w-4" />
@@ -353,7 +362,10 @@ const lightboxSrc = ref<string | null>(null);
                         </button>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p class="truncate text-sm font-medium">{{ e.title }}</p>
+                                <p class="truncate text-sm font-medium">
+                                    {{ e.title }}
+                                    <span v-if="e.note" class="font-normal text-muted-foreground"> · {{ e.note }}</span>
+                                </p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-orange-400">
                                     {{ e.amount_mmk.toLocaleString() }}
                                 </p>
@@ -361,7 +373,6 @@ const lightboxSrc = ref<string | null>(null);
                             <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
                                 {{ e.contact.name }}
                             </p>
-                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">{{ e.note }}</p>
                         </div>
                         <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(e)">
                             <Pencil class="h-4 w-4" />
@@ -372,7 +383,7 @@ const lightboxSrc = ref<string | null>(null);
         </ul>
     </section>
 
-    <!-- Income (settled receivable) -->
+    <!-- Income (settled receivable) — sorted by time -->
     <section v-if="incomeEntries.length" class="mt-6">
         <h2 class="text-sm font-medium text-green-500">Income</h2>
         <ul class="mt-2 space-y-2">
@@ -387,15 +398,19 @@ const lightboxSrc = ref<string | null>(null);
                         </button>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p class="truncate text-sm font-medium line-through">{{ e.title }}</p>
+                                <p class="truncate text-sm font-medium line-through">
+                                    {{ e.title }}
+                                    <span v-if="e.note" class="font-normal text-muted-foreground no-underline"> · {{ e.note }}</span>
+                                </p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-green-500">
                                     +{{ e.amount_mmk.toLocaleString() }}
                                 </p>
                             </div>
-                            <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
-                                {{ e.contact.name }}
+                            <p class="text-xs text-muted-foreground">
+                                <span v-if="fmtTime(e.paid_at)">{{ fmtTime(e.paid_at) }}</span>
+                                <span v-if="fmtTime(e.paid_at) && e.contact && e.contact.name !== e.title"> · </span>
+                                <span v-if="e.contact && e.contact.name !== e.title">{{ e.contact.name }}</span>
                             </p>
-                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">{{ e.note }}</p>
                         </div>
                         <img
                             v-if="e.image"
@@ -412,7 +427,7 @@ const lightboxSrc = ref<string | null>(null);
         </ul>
     </section>
 
-    <!-- Expense (settled payable) -->
+    <!-- Expense (settled payable) — sorted by time -->
     <section v-if="expenseEntries.length" class="mt-6">
         <h2 class="text-sm font-medium text-rose-400">Expense</h2>
         <ul class="mt-2 space-y-2">
@@ -427,15 +442,19 @@ const lightboxSrc = ref<string | null>(null);
                         </button>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p class="truncate text-sm font-medium line-through">{{ e.title }}</p>
+                                <p class="truncate text-sm font-medium line-through">
+                                    {{ e.title }}
+                                    <span v-if="e.note" class="font-normal text-muted-foreground no-underline"> · {{ e.note }}</span>
+                                </p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-rose-400">
                                     -{{ e.amount_mmk.toLocaleString() }}
                                 </p>
                             </div>
-                            <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
-                                {{ e.contact.name }}
+                            <p class="text-xs text-muted-foreground">
+                                <span v-if="fmtTime(e.paid_at)">{{ fmtTime(e.paid_at) }}</span>
+                                <span v-if="fmtTime(e.paid_at) && e.contact && e.contact.name !== e.title"> · </span>
+                                <span v-if="e.contact && e.contact.name !== e.title">{{ e.contact.name }}</span>
                             </p>
-                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">{{ e.note }}</p>
                         </div>
                         <img
                             v-if="e.image"

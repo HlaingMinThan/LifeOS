@@ -98,8 +98,10 @@ class InboxApplier
     /** Mark a matching open receivable paid; record new income if none exists. */
     private function incomeReceived(array $parsed, bool &$created, User $user): LedgerEntry
     {
+        $paidAt = $this->buildPaidAt($parsed);
+
         if ($entry = $this->findLedger($parsed['target'] ?? '', $user, 'receivable')) {
-            $entry->update(['status' => 'paid', 'paid_at' => now()]);
+            $entry->update(['status' => 'paid', 'paid_at' => $paidAt]);
 
             return $entry;
         }
@@ -111,8 +113,9 @@ class InboxApplier
             'direction' => 'receivable',
             'title' => $parsed['target'] ?? 'Income',
             'amount_mmk' => $parsed['amount_mmk'] ?? 0,
+            'due_date' => $parsed['due'] ?? null,
             'status' => 'paid',
-            'paid_at' => now(),
+            'paid_at' => $paidAt,
         ];
 
         if ($parsed['_image'] ?? null) {
@@ -136,10 +139,19 @@ class InboxApplier
         if ($parsed['_image'] ?? null) {
             $data['image'] = $parsed['_image'];
             $data['status'] = 'paid';
-            $data['paid_at'] = now();
+            $data['paid_at'] = $this->buildPaidAt($parsed);
         }
 
         return $user->ledgerEntries()->create($data);
+    }
+
+    /** Combine parsed date + time into a paid_at datetime. */
+    private function buildPaidAt(array $parsed): \DateTimeInterface
+    {
+        $date = $parsed['due'] ?? now()->toDateString();
+        $time = $parsed['time'] ?? now()->format('H:i');
+
+        return now()->parse("{$date} {$time}");
     }
 
     private function addTodo(array $parsed, User $user): Todo

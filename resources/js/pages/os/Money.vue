@@ -69,6 +69,7 @@ const form = reactive({
 const imageFile = ref<File | null>(null);
 const imagePreview = ref<string | null>(null);
 const storedImagePath = ref<string | null>(null);
+const parsedTime = ref<string | null>(null);
 const parsing = ref(false);
 const parseError = ref<string | null>(null);
 
@@ -87,6 +88,7 @@ function startNew(direction: string = 'payable') {
     imageFile.value = null;
     imagePreview.value = null;
     storedImagePath.value = null;
+    parsedTime.value = null;
     parseError.value = null;
     showNewForm.value = true;
 }
@@ -102,6 +104,7 @@ function startEdit(e: Entry) {
     imageFile.value = null;
     imagePreview.value = null;
     storedImagePath.value = null;
+    parsedTime.value = null;
     parseError.value = null;
 }
 
@@ -111,6 +114,7 @@ function closeForm() {
     imageFile.value = null;
     imagePreview.value = null;
     storedImagePath.value = null;
+    parsedTime.value = null;
     parseError.value = null;
 }
 
@@ -153,6 +157,7 @@ async function onScreenshotPick(event: Event) {
         form.amount_mmk = data.amount_mmk || null;
         form.due_date = data.due || todayIso;
         form.note = data.note || '';
+        parsedTime.value = data.time || null;
         storedImagePath.value = data.image;
     } catch {
         parseError.value = 'Could not reach the server.';
@@ -175,6 +180,9 @@ function saveForm() {
         data.append('stored_image', storedImagePath.value);
     } else if (imageFile.value) {
         data.append('image', imageFile.value);
+    }
+    if (parsedTime.value) {
+        data.append('paid_time', parsedTime.value);
     }
 
     const opts = { preserveScroll: true, onSuccess: closeForm, forceFormData: true };
