@@ -21,8 +21,10 @@ class LedgerController extends Controller
             : now()->format('Y-m');
         $start = now()->parse($month.'-01');
 
+        $entries = $request->user()->ledgerEntries();
+
         // Per-day counts for the calendar (both open due_date + settled paid_at).
-        $dueCounts = LedgerEntry::open()
+        $dueCounts = (clone $entries)->open()
             ->whereBetween('due_date', [$start->toDateString(), $start->copy()->endOfMonth()->toDateString()])
             ->get(['due_date', 'direction'])
             ->groupBy(fn ($e) => $e->due_date->toDateString())
@@ -31,7 +33,7 @@ class LedgerController extends Controller
                 'expense' => $group->where('direction', 'payable')->count(),
             ]);
 
-        $paidCounts = LedgerEntry::where('status', 'paid')
+        $paidCounts = (clone $entries)->where('status', 'paid')
             ->whereBetween('paid_at', [$start->startOfDay(), $start->copy()->endOfMonth()->endOfDay()])
             ->get(['paid_at', 'direction'])
             ->groupBy(fn ($e) => $e->paid_at->toDateString())
@@ -55,7 +57,7 @@ class LedgerController extends Controller
         $todayIso = now()->toDateString();
         $weekEndIso = now()->addDays(6)->toDateString();
 
-        $openEntries = LedgerEntry::open()->with('contact')
+        $openEntries = (clone $entries)->open()->with('contact')
             ->orderByRaw('due_date is null')->orderBy('due_date')->get();
 
         $thisWeek = $openEntries->filter(
@@ -84,21 +86,22 @@ class LedgerController extends Controller
     }
 
     /** Day detail: open entries due on this date + settled entries paid on this date. */
-    public function day(string $date): Response
+    public function day(Request $request, string $date): Response
     {
         $dateStr = now()->parse($date)->toDateString();
+        $entries = $request->user()->ledgerEntries();
 
-        $dueOnDay = LedgerEntry::open()->with('contact')
+        $dueOnDay = (clone $entries)->open()->with('contact')
             ->whereDate('due_date', $dateStr)->get();
 
-        $paidOnDay = LedgerEntry::where('status', 'paid')->with('contact')
+        $paidOnDay = (clone $entries)->where('status', 'paid')->with('contact')
             ->whereDate('paid_at', $dateStr)->get();
 
-        $entries = $dueOnDay->concat($paidOnDay)->unique('id')->sortBy('direction')->values();
+        $all = $dueOnDay->concat($paidOnDay)->unique('id')->sortBy('direction')->values();
 
         return Inertia::render('os/MoneyDay', [
             'date' => $date,
-            'entries' => $entries,
+            'entries' => $all,
         ]);
     }
 
@@ -157,18 +160,19 @@ class LedgerController extends Controller
             $data['paid_at'] = now();
         }
 
-        LedgerEntry::create($data);
+        $request->user()->ledgerEntries()->create($data);
 
         return back();
     }
 
-    public function update(Request $request, LedgerEntry $entry): RedirectResponse
+    public function update(Request $request, int $entry): RedirectResponse
     {
+        $model = $this->find($request, $entry);
         $validated = $this->validated($request);
 
         if ($request->hasFile('image')) {
-            if ($entry->image) {
-                Storage::disk('public')->delete($entry->image);
+            if ($model->image) {
+                Storage::disk('public')->delete($model->image);
             }
             $validated['image'] = $request->file('image')->store('ledger', 'public');
         }
@@ -176,34 +180,44 @@ class LedgerController extends Controller
         // A contact is only attached because it matched the original title.
         // Renaming away from it makes the link a lie, so drop it unless the
         // new title still refers to that contact (name or alias).
-        if ($entry->contact && $validated['title'] !== $entry->title
-            && ! $entry->contact->matchesName($validated['title'])) {
+        if ($model->contact && $validated['title'] !== $model->title
+            && ! $model->contact->matchesName($validated['title'])) {
             $validated['contact_id'] = null;
         }
 
-        $entry->update($validated);
+        $model->update($validated);
 
         return back();
     }
 
-    public function toggle(LedgerEntry $entry): RedirectResponse
+    public function toggle(Request $request, int $entry): RedirectResponse
     {
-        $entry->update($entry->status === 'open'
+        $model = $this->find($request, $entry);
+
+        $model->update($model->status === 'open'
             ? ['status' => 'paid', 'paid_at' => now()]
             : ['status' => 'open', 'paid_at' => null]);
 
         return back();
     }
 
-    public function destroy(LedgerEntry $entry): RedirectResponse
+    public function destroy(Request $request, int $entry): RedirectResponse
     {
-        if ($entry->image) {
-            Storage::disk('public')->delete($entry->image);
+        $model = $this->find($request, $entry);
+
+        if ($model->image) {
+            Storage::disk('public')->delete($model->image);
         }
 
-        $entry->delete();
+        $model->delete();
 
         return back();
+    }
+
+    /** Resolve through the owner, so another user's id is a 404, not a leak. */
+    private function find(Request $request, int $id): LedgerEntry
+    {
+        return $request->user()->ledgerEntries()->findOrFail($id);
     }
 
     private function validated(Request $request): array

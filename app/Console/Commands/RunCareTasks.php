@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\CareTask;
+use App\Notifications\BotPush;
 use App\Services\Telegram\TelegramClient;
 use Illuminate\Console\Command;
+use Throwable;
 
 class RunCareTasks extends Command
 {
@@ -14,18 +16,29 @@ class RunCareTasks extends Command
 
     public function handle(TelegramClient $telegram): int
     {
-        $due = CareTask::where('active', true)
+        // Still one query across everyone: each task carries its owner, so
+        // the notification just follows $task->user to the right bot.
+        $due = CareTask::with('user')
+            ->where('active', true)
             ->where('next_run_at', '<=', now())
             ->get();
 
         foreach ($due as $task) {
-            $telegram->send("💗 {$task->title}");
+            $telegram->forUser($task->user)->send("💗 {$task->title}");
 
             $task->logs()->create(['ran_at' => now(), 'status' => 'done']);
 
-            // daily/weekly land on a fixed slot; random picks a fresh
-            // offset each time — that keeps surprises unpredictable.
+            // Reschedule BEFORE the push: a failing push must never leave the
+            // task on its old slot, or it re-fires every minute. daily/weekly
+            // land on a fixed slot; random picks a fresh offset each time.
             $task->update(['next_run_at' => $task->nextRunAfter(now())]);
+
+            // Best-effort PWA push alongside Telegram — never disrupts the flow.
+            try {
+                $task->user->notify(new BotPush("💗 {$task->title}"));
+            } catch (Throwable $e) {
+                report($e);
+            }
 
             $this->info("Fired: {$task->title} → next {$task->next_run_at}");
         }

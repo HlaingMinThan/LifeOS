@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use App\Services\Inbox\BrainDumpParser;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +11,14 @@ use Tests\TestCase;
 class BatchParserTest extends TestCase
 {
     use RefreshDatabase;
+
+    private User $user;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = User::factory()->create();
+    }
 
     public function test_claude_batch_mode_parses_whole_dump_in_one_call(): void
     {
@@ -27,7 +36,10 @@ class BatchParserTest extends TestCase
             ]),
         ]);
 
-        $items = app(BrainDumpParser::class)->parse("မနက်ဖြန်\nမနက် ၁၀ နာရီ မုန့်သွားစားရန်\n၁၁ နာရီ ရေချိုးရန်");
+        $items = app(BrainDumpParser::class)->parse(
+            "မနက်ဖြန်\nမနက် ၁၀ နာရီ မုန့်သွားစားရန်\n၁၁ နာရီ ရေချိုးရန်",
+            $this->user,
+        );
 
         Http::assertSentCount(1); // one batch call, not one per line
         $this->assertCount(2, $items); // header folded in, not an item
@@ -42,7 +54,7 @@ class BatchParserTest extends TestCase
 
         Http::fake(['api.anthropic.com/*' => Http::response(['error' => ['message' => 'boom']], 500)]);
 
-        $items = app(BrainDumpParser::class)->parse("line one here\nline two here");
+        $items = app(BrainDumpParser::class)->parse("line one here\nline two here", $this->user);
 
         // Batch call failed; per-line calls also fail → unknown placeholders,
         // but the dump still returns one reviewable row per line.

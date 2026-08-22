@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\CareTask;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /** @extends Factory<CareTask> */
@@ -11,6 +12,7 @@ class CareTaskFactory extends Factory
     public function definition(): array
     {
         return [
+            'user_id' => User::factory(),
             'title' => fake()->sentence(3),
             'schedule_type' => 'daily',
             'time_of_day' => '09:00:00',

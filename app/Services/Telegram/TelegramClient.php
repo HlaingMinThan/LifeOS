@@ -2,14 +2,44 @@
 
 namespace App\Services\Telegram;
 
+use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * One bot, one owner. Each user brings their own BotFather token, so every
+ * call needs to know whose bot it is speaking through — get an instance via
+ * forUser(), or forToken() during setup, before the token is stored.
+ */
 class TelegramClient
 {
+    private ?string $token = null;
+
+    private ?string $chatId = null;
+
+    /** Bound to a user's own bot: the normal path for sending anything. */
+    public function forUser(User $user): self
+    {
+        $client = new self;
+        $client->token = $user->telegram_bot_token;
+        $client->chatId = $user->telegram_chat_id;
+
+        return $client;
+    }
+
+    /** Used by the setup wizard to probe a token before it is trusted/stored. */
+    public function forToken(string $token, ?string $chatId = null): self
+    {
+        $client = new self;
+        $client->token = $token;
+        $client->chatId = $chatId;
+
+        return $client;
+    }
+
     public function configured(): bool
     {
-        return (bool) (config('lifeos.telegram.token') && config('lifeos.telegram.chat_id'));
+        return (bool) ($this->token && $this->chatId);
     }
 
     /** Send a message to the owner. Falls back to the log when unconfigured. */
@@ -22,17 +52,28 @@ class TelegramClient
         }
 
         Http::timeout(10)->retry(2, 300)->post($this->url('sendMessage'), [
-            'chat_id' => config('lifeos.telegram.chat_id'),
+            'chat_id' => $this->chatId,
             'text' => $text,
         ]);
     }
 
-    /** Long-poll for incoming messages (two-way magic box). */
-    public function getUpdates(int $offset): array
+    /** Identity of the bot behind a token — also how setup validates it. */
+    public function getMe(): array
     {
-        $response = Http::timeout(60)->get($this->url('getUpdates'), [
+        return Http::timeout(10)->get($this->url('getMe'))->json() ?? [];
+    }
+
+    /**
+     * Long-poll for incoming messages (two-way magic box).
+     *
+     * $timeout is a parameter because the dev poller walks several bots per
+     * cycle: a 50s hold per bot would make the last one wait minutes.
+     */
+    public function getUpdates(int $offset, int $timeout = 50): array
+    {
+        $response = Http::timeout($timeout + 10)->get($this->url('getUpdates'), [
             'offset' => $offset,
-            'timeout' => 50,
+            'timeout' => $timeout,
             'allowed_updates' => json_encode(['message']),
         ]);
 
@@ -52,13 +93,38 @@ class TelegramClient
     /** Download a file from Telegram and return its binary contents. */
     public function downloadFile(string $filePath): string
     {
-        $url = 'https://api.telegram.org/file/bot'.config('lifeos.telegram.token')."/{$filePath}";
+        $url = "https://api.telegram.org/file/bot{$this->token}/{$filePath}";
 
         return Http::timeout(30)->get($url)->body();
     }
 
+    /**
+     * Point this bot at our webhook. The secret travels back on every delivery
+     * as X-Telegram-Bot-Api-Secret-Token, which is what proves the request
+     * came from Telegram and not from someone who guessed the URL.
+     */
+    public function setWebhook(string $url, string $secret): array
+    {
+        return Http::timeout(10)->post($this->url('setWebhook'), [
+            'url' => $url,
+            'secret_token' => $secret,
+            'allowed_updates' => json_encode(['message']),
+            'drop_pending_updates' => true,
+        ])->json() ?? [];
+    }
+
+    public function deleteWebhook(): array
+    {
+        return Http::timeout(10)->post($this->url('deleteWebhook'))->json() ?? [];
+    }
+
+    public function getWebhookInfo(): array
+    {
+        return Http::timeout(10)->get($this->url('getWebhookInfo'))->json('result', []);
+    }
+
     private function url(string $method): string
     {
-        return 'https://api.telegram.org/bot'.config('lifeos.telegram.token')."/{$method}";
+        return "https://api.telegram.org/bot{$this->token}/{$method}";
     }
 }

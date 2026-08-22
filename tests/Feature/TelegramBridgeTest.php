@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\CareTask;
+use App\Models\Idea;
 use App\Models\InboxEvent;
 use App\Models\Todo;
+use App\Models\User;
 use App\Services\Telegram\InboxBridge;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -12,13 +15,14 @@ class TelegramBridgeTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        config([
-            'lifeos.parser' => 'fake',
-            'lifeos.telegram.chat_id' => '12345',
-        ]);
+        config(['lifeos.parser' => 'fake']);
+        // The chat the bot is linked to now lives on the user, not on config.
+        $this->user = User::factory()->withTelegram('12345')->create();
     }
 
     private function message(string $text, string $chatId = '12345'): array
@@ -28,7 +32,7 @@ class TelegramBridgeTest extends TestCase
 
     public function test_text_is_parsed_and_applied_with_reply(): void
     {
-        $reply = app(InboxBridge::class)->handle($this->message('mushroom idea မှတ်ထား'));
+        $reply = app(InboxBridge::class)->handle($this->message('mushroom idea မှတ်ထား'), $this->user);
 
         $this->assertStringContainsString('✅ Idea parked', $reply);
         $this->assertSame(1, InboxEvent::where('applied', true)->count());
@@ -37,10 +41,10 @@ class TelegramBridgeTest extends TestCase
     public function test_undo_reverts_latest_event(): void
     {
         $bridge = app(InboxBridge::class);
-        $bridge->handle($this->message('buy dog food tomorrow'));
+        $bridge->handle($this->message('buy dog food tomorrow'), $this->user);
         $this->assertSame(1, Todo::count());
 
-        $reply = $bridge->handle($this->message('/undo'));
+        $reply = $bridge->handle($this->message('/undo'), $this->user);
 
         $this->assertStringContainsString('↩️ Undone', $reply);
         $this->assertSame(0, Todo::count());
@@ -48,7 +52,7 @@ class TelegramBridgeTest extends TestCase
 
     public function test_unsure_parse_asks_instead_of_guessing(): void
     {
-        $reply = app(InboxBridge::class)->handle($this->message('hi'));
+        $reply = app(InboxBridge::class)->handle($this->message('hi'), $this->user);
 
         $this->assertStringContainsString('🤔', $reply);
         $this->assertSame(0, InboxEvent::count());
@@ -59,7 +63,7 @@ class TelegramBridgeTest extends TestCase
         $bridge = app(InboxBridge::class);
 
         // Fake parser sets no due date → the reply must say so explicitly.
-        $reply = $bridge->handle($this->message('arkar ဆီက 1 သိန်း ရစရာရှိတယ်'));
+        $reply = $bridge->handle($this->message('arkar ဆီက 1 သိန်း ရစရာရှိတယ်'), $this->user);
 
         $this->assertStringContainsString('✅ Income', $reply);
         $this->assertStringContainsString('📅 no date', $reply);
@@ -67,10 +71,10 @@ class TelegramBridgeTest extends TestCase
 
     public function test_care_command_lists_tasks_with_schedules(): void
     {
-        \App\Models\CareTask::factory()->random(7, 20)->create(['title' => 'Send flowers']);
-        \App\Models\CareTask::factory()->create(['title' => 'Paused one', 'active' => false]);
+        CareTask::factory()->for($this->user)->random(7, 20)->create(['title' => 'Send flowers']);
+        CareTask::factory()->for($this->user)->create(['title' => 'Paused one', 'active' => false]);
 
-        $reply = app(InboxBridge::class)->handle($this->message('/care'));
+        $reply = app(InboxBridge::class)->handle($this->message('/care'), $this->user);
 
         $this->assertStringContainsString('Send flowers (every 7–20 days 🎲)', $reply);
         $this->assertStringContainsString('Paused one', $reply);
@@ -79,9 +83,9 @@ class TelegramBridgeTest extends TestCase
 
     public function test_idea_command_lists_parking_lot(): void
     {
-        \App\Models\Idea::factory()->create(['title' => 'mushroom idea']);
+        Idea::factory()->for($this->user)->create(['title' => 'mushroom idea']);
 
-        $reply = app(InboxBridge::class)->handle($this->message('/idea'));
+        $reply = app(InboxBridge::class)->handle($this->message('/idea'), $this->user);
 
         $this->assertStringContainsString('💡 Ideas:', $reply);
         $this->assertStringContainsString('mushroom idea', $reply);
@@ -89,7 +93,7 @@ class TelegramBridgeTest extends TestCase
 
     public function test_messages_from_other_chats_are_ignored(): void
     {
-        $reply = app(InboxBridge::class)->handle($this->message('mushroom idea မှတ်ထား', '99999'));
+        $reply = app(InboxBridge::class)->handle($this->message('mushroom idea မှတ်ထား', '99999'), $this->user);
 
         $this->assertNull($reply);
         $this->assertSame(0, InboxEvent::count());
@@ -99,7 +103,7 @@ class TelegramBridgeTest extends TestCase
     {
         $reply = app(InboxBridge::class)->handle($this->message(
             "mushroom idea မှတ်ထား\nbuy dog food tomorrow\nhi",
-        ));
+        ), $this->user);
 
         $this->assertStringContainsString('✅ Idea parked', $reply);
         $this->assertStringContainsString('✅ Todo added', $reply);
@@ -110,16 +114,16 @@ class TelegramBridgeTest extends TestCase
 
     public function test_today_returns_digest(): void
     {
-        $reply = app(InboxBridge::class)->handle($this->message('/today'));
+        $reply = app(InboxBridge::class)->handle($this->message('/today'), $this->user);
 
         $this->assertStringContainsString('Nothing needs you today', $reply);
     }
 
     public function test_natural_language_date_query_returns_day_view(): void
     {
-        Todo::factory()->create(['title' => 'monday plan', 'due_date' => '2026-07-06']);
+        Todo::factory()->for($this->user)->create(['title' => 'monday plan', 'due_date' => '2026-07-06']);
 
-        $reply = app(InboxBridge::class)->handle($this->message('give me todos for 2026-07-06'));
+        $reply = app(InboxBridge::class)->handle($this->message('give me todos for 2026-07-06'), $this->user);
 
         $this->assertStringContainsString('Mon, 6 Jul 2026', $reply);
         $this->assertStringContainsString('monday plan', $reply);
@@ -131,20 +135,20 @@ class TelegramBridgeTest extends TestCase
     {
         $bridge = app(InboxBridge::class);
 
-        $this->assertStringContainsString('Nothing needs you today', $bridge->handle($this->message('today')));
-        $this->assertStringContainsString('Nothing needs you today', $bridge->handle($this->message('Tdy')));
-        $this->assertStringContainsString('Nothing on this day', $bridge->handle($this->message('tmr')));
-        $this->assertStringContainsString('Nothing to undo', $bridge->handle($this->message('undo')));
+        $this->assertStringContainsString('Nothing needs you today', $bridge->handle($this->message('today'), $this->user));
+        $this->assertStringContainsString('Nothing needs you today', $bridge->handle($this->message('Tdy'), $this->user));
+        $this->assertStringContainsString('Nothing on this day', $bridge->handle($this->message('tmr'), $this->user));
+        $this->assertStringContainsString('Nothing to undo', $bridge->handle($this->message('undo'), $this->user));
         // Bare command words must NOT become todos.
         $this->assertSame(0, InboxEvent::count());
     }
 
     public function test_tomorrow_previews_next_day(): void
     {
-        Todo::factory()->create(['title' => 'laundry တင်ရန်', 'due_date' => today()->addDay()]);
-        Todo::factory()->create(['title' => 'not tomorrow', 'due_date' => today()->addDays(3)]);
+        Todo::factory()->for($this->user)->create(['title' => 'laundry တင်ရန်', 'due_date' => today()->addDay()]);
+        Todo::factory()->for($this->user)->create(['title' => 'not tomorrow', 'due_date' => today()->addDays(3)]);
 
-        $reply = app(InboxBridge::class)->handle($this->message('/tomorrow'));
+        $reply = app(InboxBridge::class)->handle($this->message('/tomorrow'), $this->user);
 
         $this->assertStringContainsString('laundry တင်ရန်', $reply);
         $this->assertStringNotContainsString('not tomorrow', $reply);
@@ -152,10 +156,10 @@ class TelegramBridgeTest extends TestCase
 
     public function test_yesterday_shows_done_and_open_marks(): void
     {
-        Todo::factory()->done()->create(['title' => 'finished thing', 'due_date' => today()->subDay()]);
-        Todo::factory()->create(['title' => 'missed thing', 'due_date' => today()->subDay()]);
+        Todo::factory()->for($this->user)->done()->create(['title' => 'finished thing', 'due_date' => today()->subDay()]);
+        Todo::factory()->for($this->user)->create(['title' => 'missed thing', 'due_date' => today()->subDay()]);
 
-        $reply = app(InboxBridge::class)->handle($this->message('/yesterday'));
+        $reply = app(InboxBridge::class)->handle($this->message('/yesterday'), $this->user);
 
         $this->assertStringContainsString('✅ finished thing', $reply);
         $this->assertStringContainsString('⭕ missed thing', $reply);
@@ -163,13 +167,13 @@ class TelegramBridgeTest extends TestCase
 
     public function test_todobydate_asks_then_answers(): void
     {
-        Todo::factory()->create(['title' => 'monday plan', 'due_date' => '2026-07-06']);
+        Todo::factory()->for($this->user)->create(['title' => 'monday plan', 'due_date' => '2026-07-06']);
         $bridge = app(InboxBridge::class);
 
-        $ask = $bridge->handle($this->message('/todobydate'));
+        $ask = $bridge->handle($this->message('/todobydate'), $this->user);
         $this->assertStringContainsString('Which date?', $ask);
 
-        $reply = $bridge->handle($this->message('July 6'));
+        $reply = $bridge->handle($this->message('July 6'), $this->user);
         $this->assertStringContainsString('Mon, 6 Jul 2026', $reply);
         $this->assertStringContainsString('monday plan', $reply);
 
@@ -180,12 +184,12 @@ class TelegramBridgeTest extends TestCase
     public function test_todobydate_reprompts_on_bad_date(): void
     {
         $bridge = app(InboxBridge::class);
-        $bridge->handle($this->message('/todobydate'));
+        $bridge->handle($this->message('/todobydate'), $this->user);
 
-        $retry = $bridge->handle($this->message('blah blah blah'));
+        $retry = $bridge->handle($this->message('blah blah blah'), $this->user);
         $this->assertStringContainsString("Couldn't read that date", $retry);
 
-        $reply = $bridge->handle($this->message('6.7'));
+        $reply = $bridge->handle($this->message('6.7'), $this->user);
         $this->assertStringContainsString('6 Jul 2026', $reply);
     }
 }

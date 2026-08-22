@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\CareTask;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -11,16 +12,18 @@ class CareEngineTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        config(['lifeos.telegram.token' => 'test-token', 'lifeos.telegram.chat_id' => '12345']);
+        $this->user = User::factory()->withTelegram()->create();
         Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
     }
 
     public function test_due_task_fires_logs_and_reschedules(): void
     {
-        $task = CareTask::factory()->create([
+        $task = CareTask::factory()->for($this->user)->create([
             'title' => 'Good morning message',
             'next_run_at' => now()->subMinute(),
             'time_of_day' => '09:00:00',
@@ -37,7 +40,7 @@ class CareEngineTest extends TestCase
 
     public function test_random_task_reschedules_within_bounds(): void
     {
-        $task = CareTask::factory()->random(7, 20)->create([
+        $task = CareTask::factory()->for($this->user)->random(7, 20)->create([
             'next_run_at' => now()->subMinute(),
         ]);
 
@@ -50,8 +53,8 @@ class CareEngineTest extends TestCase
 
     public function test_future_and_inactive_tasks_do_not_fire(): void
     {
-        CareTask::factory()->create(['next_run_at' => now()->addHour()]);
-        CareTask::factory()->create(['next_run_at' => now()->subHour(), 'active' => false]);
+        CareTask::factory()->for($this->user)->create(['next_run_at' => now()->addHour()]);
+        CareTask::factory()->for($this->user)->create(['next_run_at' => now()->subHour(), 'active' => false]);
 
         $this->artisan('care:run')->assertSuccessful();
 

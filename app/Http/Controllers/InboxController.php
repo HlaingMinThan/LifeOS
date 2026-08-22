@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\InboxEvent;
-use App\Models\ParserExample;
 use App\Services\Inbox\InboxApplier;
 use App\Services\Inbox\ParserContract;
 use Illuminate\Http\JsonResponse;
@@ -18,7 +16,7 @@ class InboxController extends Controller
 
         return response()->json([
             'raw_text' => $validated['text'],
-            'parsed' => $parser->parse($validated['text']),
+            'parsed' => $parser->parse($validated['text'], $request->user()),
         ]);
     }
 
@@ -34,12 +32,12 @@ class InboxController extends Controller
 
         // validate() strips nested keys it has no rules for — pass the full payload.
         $parsed = $request->input('parsed');
-        $event = $applier->apply($parsed, $request->input('raw_text'));
+        $event = $applier->apply($parsed, $request->input('raw_text'), $request->user());
 
         // User fixed the parse in the UI → teach the parser (spec §4:
         // the 10 most recent corrections are injected into the prompt).
         if ($request->boolean('corrected')) {
-            ParserExample::create([
+            $request->user()->parserExamples()->create([
                 'raw_text' => $request->input('raw_text'),
                 'corrected_json' => collect($parsed)->except('confidence')->all(),
             ]);
@@ -48,9 +46,11 @@ class InboxController extends Controller
         return response()->json(['event_id' => $event->id]);
     }
 
-    public function undo(InboxEvent $event, InboxApplier $applier): JsonResponse
+    public function undo(Request $request, int $event, InboxApplier $applier): JsonResponse
     {
-        $applier->undo($event);
+        // Resolve through the owner: undo rewrites records, so an unscoped
+        // lookup here would let anyone revert someone else's history.
+        $applier->undo($request->user()->inboxEvents()->findOrFail($event));
 
         return response()->json(['ok' => true]);
     }

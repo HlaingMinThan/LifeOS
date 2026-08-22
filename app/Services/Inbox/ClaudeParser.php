@@ -2,10 +2,7 @@
 
 namespace App\Services\Inbox;
 
-use App\Models\Contact;
-use App\Models\LedgerEntry;
-use App\Models\ParserExample;
-use App\Models\Todo;
+use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -17,7 +14,7 @@ use RuntimeException;
  */
 class ClaudeParser implements ParserContract
 {
-    public function parse(string $text): array
+    public function parse(string $text, User $user): array
     {
         $response = Http::withHeaders([
             'x-api-key' => config('lifeos.anthropic.key'),
@@ -28,7 +25,7 @@ class ClaudeParser implements ParserContract
             // Sonnet 5 defaults to adaptive thinking; a one-line parse doesn't
             // need it and it triples latency + cost.
             'thinking' => ['type' => 'disabled'],
-            'system' => $this->systemPrompt(),
+            'system' => $this->systemPrompt($user),
             'messages' => [['role' => 'user', 'content' => $text]],
         ]);
 
@@ -168,7 +165,7 @@ PROMPT;
      * ("မနက်ဖြန်", "for the shop") give context to the lines below them.
      * Returns [['raw_text' => ..., 'parsed' => [...]], ...].
      */
-    public function parseMany(string $text): array
+    public function parseMany(string $text, User $user): array
     {
         $today = now()->toDateString();
         $tomorrow = now()->addDay()->toDateString();
@@ -236,15 +233,15 @@ INSTRUCTIONS;
         $response = Http::withHeaders([
             'x-api-key' => config('lifeos.anthropic.key'),
             'anthropic-version' => '2023-06-01',
-        // One retry only: each attempt can hold a PHP worker for the full
-        // timeout, and a stuck worker is what makes other tabs queue.
+            // One retry only: each attempt can hold a PHP worker for the full
+            // timeout, and a stuck worker is what makes other tabs queue.
         ])->timeout(90)->retry(1, 500)->post('https://api.anthropic.com/v1/messages', [
             'model' => config('lifeos.anthropic.model'),
             // Burmese is token-dense and every item carries raw + target;
             // a 30-line dump needs far more than a chat reply.
             'max_tokens' => 16000,
             'thinking' => ['type' => 'disabled'],
-            'system' => $this->systemPrompt().$batchInstructions,
+            'system' => $this->systemPrompt($user).$batchInstructions,
             'messages' => [['role' => 'user', 'content' => $text]],
         ]);
 
@@ -285,24 +282,28 @@ INSTRUCTIONS;
             ->all();
     }
 
-    private function systemPrompt(): string
+    /**
+     * The live snapshot. Every query is scoped to $user — one person's
+     * contacts, debts and todos must never reach another person's prompt.
+     */
+    private function systemPrompt(User $user): string
     {
-        $contacts = Contact::all()->map->promptLabel()->implode(', ') ?: '(none yet)';
+        $contacts = $user->contacts()->get()->map->promptLabel()->implode(', ') ?: '(none yet)';
 
-        $ledger = LedgerEntry::open()->get()
+        $ledger = $user->ledgerEntries()->open()->get()
             ->map(fn ($e) => "\"{$e->title}\" ({$e->direction}, {$e->amount_mmk} MMK)")
             ->implode(', ') ?: '(none)';
 
-        $todos = Todo::open()->get()
+        $todos = $user->todos()->open()->get()
             ->map(fn ($t) => "\"{$t->title}\" ({$t->bucket})")
             ->implode(', ') ?: '(none)';
 
-        $learned = ParserExample::latest()->take(10)->get()
+        $learned = $user->parserExamples()->latest()->take(10)->get()
             ->map(fn ($ex) => "\"{$ex->raw_text}\"\n→ ".json_encode($ex->corrected_json, JSON_UNESCAPED_UNICODE))
             ->implode("\n\n");
 
         // Short-term memory: follow-up messages ("ပြီးရင် …") refer to these.
-        $recent = \App\Models\InboxEvent::where('created_at', '>=', now()->subMinutes(30))
+        $recent = $user->inboxEvents()->where('created_at', '>=', now()->subMinutes(30))
             ->latest('id')->take(5)->get()->reverse()
             ->map(function ($event) {
                 $due = $event->parsed_json['due'] ?? null;

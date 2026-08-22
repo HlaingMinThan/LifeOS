@@ -6,8 +6,16 @@ use App\Http\Controllers\IdeaController;
 use App\Http\Controllers\InboxController;
 use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\OnboardController;
+use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TodoController;
 use Illuminate\Support\Facades\Route;
+
+// Telegram delivers here in production. Public by necessity — the caller is
+// Telegram, not a logged-in browser; the URL secret names the account and the
+// secret_token header authenticates the request (see the controller).
+Route::post('/telegram/webhook/{secret}', TelegramWebhookController::class)
+    ->name('telegram.webhook');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/', [HomeController::class, 'index'])->name('home');
@@ -49,8 +57,12 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/inbox/apply', [InboxController::class, 'apply'])->name('inbox.apply');
     Route::post('/inbox/undo/{event}', [InboxController::class, 'undo'])->name('inbox.undo');
 
+    // PWA push: a browser stores/removes its Web Push subscription here.
+    Route::post('/push/subscribe', [PushSubscriptionController::class, 'store'])->name('push.subscribe');
+    Route::delete('/push/subscribe', [PushSubscriptionController::class, 'destroy'])->name('push.unsubscribe');
+
     // Starter-kit pages still link to the dashboard route.
     Route::redirect('/dashboard', '/')->name('dashboard');
 });
 
-require __DIR__ . '/settings.php';
+require __DIR__.'/settings.php';

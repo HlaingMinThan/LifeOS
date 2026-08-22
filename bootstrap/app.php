@@ -17,6 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
+        // Telegram posts server-to-server and has no session or CSRF token.
+        // The route authenticates itself via the secret_token header instead.
+        $middleware->validateCsrfTokens(except: ['telegram/webhook/*']);
+
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,

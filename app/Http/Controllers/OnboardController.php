@@ -22,7 +22,7 @@ class OnboardController extends Controller
     {
         $validated = $request->validate(['text' => ['required', 'string', 'max:10000']]);
 
-        return response()->json(['items' => $parser->parse($validated['text'])]);
+        return response()->json(['items' => $parser->parse($validated['text'], $request->user())]);
     }
 
     /** Step 2: persist the reviewed items, each as a normal inbox event. */
@@ -39,7 +39,7 @@ class OnboardController extends Controller
 
         foreach ($request->input('items') as $item) {
             try {
-                $applier->apply($item['parsed'], $item['raw_text']);
+                $applier->apply($item['parsed'], $item['raw_text'], $request->user());
                 $applied++;
             } catch (ValidationException) {
                 $failed[] = $item['raw_text'];

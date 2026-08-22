@@ -2,30 +2,21 @@
 
 namespace App\Models;
 
+use App\Concerns\BelongsToUser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Schema;
 
 class LedgerEntry extends Model
 {
-    use HasFactory, SoftDeletes;
+    use BelongsToUser, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'user_id', 'contact_id', 'direction', 'title', 'amount_mmk', 'amount_usd',
         'status', 'due_date', 'paid_at', 'note', 'image',
     ];
-
-    protected static function booted(): void
-    {
-        static::creating(function (self $entry) {
-            if (Schema::hasColumn('ledger_entries', 'user_id')) {
-                $entry->user_id ??= auth()->id() ?? 1;
-            }
-        });
-    }
 
     protected function casts(): array
     {

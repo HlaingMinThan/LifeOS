@@ -47,6 +47,21 @@ class UserFactory extends Factory
     }
 
     /**
+     * Indicate that the user has finished the Telegram setup wizard.
+     */
+    public function withTelegram(string $chatId = '12345'): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'telegram_bot_token' => '123456789:test-token',
+            'telegram_bot_username' => 'lifeos_test_bot',
+            'telegram_chat_id' => $chatId,
+            'telegram_webhook_secret' => Str::random(48),
+            'telegram_linked_at' => now(),
+            'telegram_prompt_dismissed_at' => now(),
+        ]);
+    }
+
+    /**
      * Indicate that the model has two-factor authentication configured.
      */
     public function withTwoFactor(): static

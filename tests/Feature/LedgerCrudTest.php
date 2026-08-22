@@ -21,7 +21,7 @@ class LedgerCrudTest extends TestCase
 
     public function test_money_page_returns_calendar_data_and_capped_lists(): void
     {
-        LedgerEntry::factory()->create(['due_date' => now()->addDay()]); // open, this week
+        LedgerEntry::factory()->for($this->user)->create(['due_date' => now()->addDay()]); // open, this week
 
         $this->actingAs($this->user)->get('/money')
             ->assertInertia(fn ($page) => $page
@@ -55,8 +55,8 @@ class LedgerCrudTest extends TestCase
     {
         // Magic-box entries link a contact whose name matches the original
         // title; the rename must win over that link, in app and digest.
-        $contact = \App\Models\Contact::factory()->create(['name' => 'Cargo Pro']);
-        $entry = LedgerEntry::factory()->create([
+        $contact = \App\Models\Contact::factory()->for($this->user)->create(['name' => 'Cargo Pro']);
+        $entry = LedgerEntry::factory()->for($this->user)->create([
             'contact_id' => $contact->id,
             'direction' => 'receivable',
             'title' => 'Cargo Pro',
@@ -69,20 +69,19 @@ class LedgerCrudTest extends TestCase
             'amount_mmk' => 780000,
         ])->assertRedirect();
 
-        // The renamed entry should appear in one of the open lists.
         $entry->refresh();
         $this->assertSame('Cargo Pro — March delivery batch', $entry->title);
 
         $this->assertStringContainsString(
             'Cargo Pro — March delivery batch',
-            app(\App\Services\DigestBuilder::class)->build(),
+            app(\App\Services\DigestBuilder::class)->build($this->user),
         );
     }
 
     public function test_renaming_away_from_a_contact_drops_the_stale_link(): void
     {
-        $contact = \App\Models\Contact::factory()->create(['name' => 'Gon Khaung']);
-        $entry = LedgerEntry::factory()->create([
+        $contact = \App\Models\Contact::factory()->for($this->user)->create(['name' => 'Gon Khaung']);
+        $entry = LedgerEntry::factory()->for($this->user)->create([
             'contact_id' => $contact->id, 'title' => 'Gon Khaung', 'direction' => 'payable',
         ]);
 
@@ -96,10 +95,10 @@ class LedgerCrudTest extends TestCase
 
     public function test_renaming_that_still_names_the_contact_keeps_the_link(): void
     {
-        $contact = \App\Models\Contact::factory()->create([
+        $contact = \App\Models\Contact::factory()->for($this->user)->create([
             'name' => 'Gon Khaung', 'aliases' => ['ဂွန်ခေါင်'],
         ]);
-        $entry = LedgerEntry::factory()->create([
+        $entry = LedgerEntry::factory()->for($this->user)->create([
             'contact_id' => $contact->id, 'title' => 'Gon Khaung', 'direction' => 'payable',
         ]);
 
@@ -113,7 +112,7 @@ class LedgerCrudTest extends TestCase
 
     public function test_entry_can_be_edited(): void
     {
-        $entry = LedgerEntry::factory()->create([
+        $entry = LedgerEntry::factory()->for($this->user)->create([
             'direction' => 'payable', 'title' => 'old', 'amount_mmk' => 100000,
         ]);
 
@@ -143,7 +142,7 @@ class LedgerCrudTest extends TestCase
 
     public function test_editing_does_not_change_status_or_paid_at(): void
     {
-        $entry = LedgerEntry::factory()->paid()->create(['amount_mmk' => 100000]);
+        $entry = LedgerEntry::factory()->for($this->user)->paid()->create(['amount_mmk' => 100000]);
 
         $this->actingAs($this->user)->patch("/ledger/{$entry->id}", [
             'direction' => $entry->direction,

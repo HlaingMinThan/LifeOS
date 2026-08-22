@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
+    Bell,
     ChevronRight,
     Download,
     LogOut,
     Palette,
+    Send,
     ShieldCheck,
     UserPen,
 } from 'lucide-vue-next';
@@ -24,21 +26,55 @@ const initials = computed(() =>
 );
 
 const menu = [
-    { href: '/settings/profile', label: 'Edit profile', description: 'Name and email', icon: UserPen },
-    { href: '/settings/security', label: 'Security', description: 'Password and two-factor', icon: ShieldCheck },
-    { href: '/settings/appearance', label: 'Appearance', description: 'Light / dark mode', icon: Palette },
-    { href: '/onboard', label: 'Import data', description: 'Brain-dump onboarding', icon: Download },
+    {
+        href: '/settings/profile',
+        label: 'Edit profile',
+        description: 'Name and email',
+        icon: UserPen,
+    },
+    {
+        href: '/settings/telegram',
+        label: 'Telegram',
+        description: 'Use Life OS from your phone',
+        icon: Send,
+    },
+    {
+        href: '/settings/notifications',
+        label: 'Notifications',
+        description: 'Push alerts on this device',
+        icon: Bell,
+    },
+    {
+        href: '/settings/security',
+        label: 'Security',
+        description: 'Password and two-factor',
+        icon: ShieldCheck,
+    },
+    {
+        href: '/settings/appearance',
+        label: 'Appearance',
+        description: 'Light / dark mode',
+        icon: Palette,
+    },
+    {
+        href: '/onboard',
+        label: 'Import data',
+        description: 'Brain-dump onboarding',
+        icon: Download,
+    },
 ];
 </script>
 
 <template>
     <Head title="Profile" />
 
-    <h1 class="text-2xl font-bold text-gradient-brand">Profile</h1>
+    <h1 class="text-gradient-brand text-2xl font-bold">Profile</h1>
 
-    <div class="mt-6 flex flex-col items-center gap-3 rounded-2xl border border-border bg-card p-6">
+    <div
+        class="mt-6 flex flex-col items-center gap-3 rounded-2xl border border-border bg-card p-6"
+    >
         <div
-            class="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-brand text-2xl font-bold text-white shadow-lg shadow-fuchsia-500/25"
+            class="bg-gradient-brand flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold text-white shadow-lg shadow-fuchsia-500/25"
         >
             {{ initials }}
         </div>
@@ -60,10 +96,16 @@ const menu = [
                     <component :is="item.icon" class="h-4 w-4" />
                 </span>
                 <span class="min-w-0 flex-1">
-                    <span class="block text-sm font-medium">{{ item.label }}</span>
-                    <span class="block text-xs text-muted-foreground">{{ item.description }}</span>
+                    <span class="block text-sm font-medium">{{
+                        item.label
+                    }}</span>
+                    <span class="block text-xs text-muted-foreground">{{
+                        item.description
+                    }}</span>
                 </span>
-                <ChevronRight class="h-4 w-4 shrink-0 text-muted-foreground/50" />
+                <ChevronRight
+                    class="h-4 w-4 shrink-0 text-muted-foreground/50"
+                />
             </Link>
         </li>
     </ul>
