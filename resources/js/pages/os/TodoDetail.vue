@@ -53,7 +53,9 @@ const toggleDone = () =>
     router.patch(`/todos/${props.todo.id}/toggle`, {}, { preserveScroll: true });
 const toggleFocus = () =>
     router.patch(`/todos/${props.todo.id}/focus`, {}, { preserveScroll: true });
-const remove = () => router.delete(`/todos/${props.todo.id}`);
+// ?from=detail tells the server not to send us back to this page — it is
+// about to stop existing. Explicit, so it survives a stripped Referer.
+const remove = () => router.delete(`/todos/${props.todo.id}?from=detail`);
 
 const backHref = props.todo.due_date
     ? `/todos/day/${props.todo.due_date.slice(0, 10)}`

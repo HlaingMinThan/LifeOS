@@ -116,8 +116,10 @@ class TodoController extends Controller
         // Deleting from the todo's own detail page: back() would return to that
         // now-soft-deleted page and 404. Send them to the todo's day instead.
         // Other callers (the day list) keep their place via back().
+        // The query flag is what the detail page sends; the Referer check is a
+        // fallback for a cached older bundle that does not send it yet.
         $refererPath = parse_url((string) $request->headers->get('referer'), PHP_URL_PATH);
-        if ($refererPath === "/todos/{$todo}") {
+        if ($request->query('from') === 'detail' || $refererPath === "/todos/{$todo}") {
             return redirect()->route('todos.day', $model->due_date?->toDateString() ?? 'undated');
         }
 
