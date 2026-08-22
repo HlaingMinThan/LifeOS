@@ -114,6 +114,7 @@ class InboxApplier
             'title' => $parsed['target'] ?? 'Income',
             'amount_mmk' => $parsed['amount_mmk'] ?? 0,
             'due_date' => $parsed['due'] ?? null,
+            'note' => $parsed['note'] ?? null,
             'status' => 'paid',
             'paid_at' => $paidAt,
         ];
@@ -134,6 +135,7 @@ class InboxApplier
             'amount_mmk' => $parsed['amount_mmk'] ?? 0,
             'status' => 'open',
             'due_date' => $parsed['due'] ?? null,
+            'note' => $parsed['note'] ?? null,
         ];
 
         if ($parsed['_image'] ?? null) {
