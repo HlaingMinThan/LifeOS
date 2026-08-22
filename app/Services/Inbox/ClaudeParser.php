@@ -115,7 +115,7 @@ class ClaudeParser implements ParserContract
             'action' => $parsed['action'],
             'target' => $parsed['target'] ?? null,
             'amount_mmk' => $parsed['amount_mmk'] ?? null,
-            'due' => $parsed['due'] ?? now()->toDateString(),
+            'due' => $parsed['due'] ?? null,
             'due_time' => null,
             'bucket' => null,
             'note' => $parsed['note'] ?? null,
@@ -145,15 +145,19 @@ Look at the screenshot and extract:
 - Who the payment is to/from (match against known contacts if possible)
 - The amount in MMK
 - Whether this is money sent (expense/payable) or received (income/receivable)
+- The transaction DATE shown on the receipt (e.g. "21 Aug 2026", "2026-08-21").
+  Use the date printed on the screenshot, NOT today's date. Only use today ({$today})
+  if no date is visible anywhere on the screenshot.
+- The transaction TIME shown on the receipt (e.g. "14:30", "2:30 PM").
+  If no time is visible, use null.
 - The transaction note/description/remark (e.g. "lunch", "rent", "phone bill") — this is
   the purpose of the transaction. Look for fields like "remark", "note", "description",
   "memo", or the transfer message. If there is a user-written note on the screenshot,
   extract it verbatim. If none, use null.
-- The transaction time shown on the receipt (e.g. "14:30", "2:30 PM")
 
 Respond with ONLY minified JSON, no markdown:
 {"action": "add_payable" or "add_receivable" or "income_received" or "mark_paid",
- "target": string, "amount_mmk": int, "due": "{$today}",
+ "target": string, "amount_mmk": int, "due": "YYYY-MM-DD",
  "note": string|null, "time": "HH:MM"|null, "confidence": 0-1}
 
 If you sent money → "add_payable"
