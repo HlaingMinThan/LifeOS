@@ -53,11 +53,23 @@ class InboxBridge
         }
 
         // Photo messages: download the image and parse with Claude vision.
+        // Telegram sends compressed images as 'photo' and file-attached images as 'document'.
         if (! empty($message['photo'])) {
-            return $this->handlePhoto($message, $user);
+            $photos = $message['photo'];
+            $fileId = end($photos)['file_id'];
+            $caption = trim($message['caption'] ?? '');
+
+            return $this->handlePhoto($fileId, $caption, $user);
         }
 
-        $text = trim($message['text'] ?? '');
+        if (! empty($message['document']) && str_starts_with($message['document']['mime_type'] ?? '', 'image/')) {
+            $fileId = $message['document']['file_id'];
+            $caption = trim($message['caption'] ?? '');
+
+            return $this->handlePhoto($fileId, $caption, $user);
+        }
+
+        $text = trim($message['text'] ?? $message['caption'] ?? '');
         if ($text === '') {
             return null;
         }
@@ -76,15 +88,11 @@ class InboxBridge
         };
     }
 
-    private function handlePhoto(array $message, User $user): string
+    private function handlePhoto(string $fileId, string $caption, User $user): string
     {
-        $photos = $message['photo'];
-        $photo = end($photos);
-        $caption = trim($message['caption'] ?? '');
-
         try {
             $bot = $this->telegram->forUser($user);
-            $fileInfo = $bot->getFile($photo['file_id']);
+            $fileInfo = $bot->getFile($fileId);
             $filePath = $fileInfo['file_path'] ?? null;
 
             if (! $filePath) {
