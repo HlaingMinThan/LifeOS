@@ -24,6 +24,25 @@ class Contact extends Model
         return $this->hasMany(LedgerEntry::class);
     }
 
+    /** Does this text still refer to this contact, by name or any alias? */
+    public function matchesName(?string $text): bool
+    {
+        if (! $text) {
+            return false;
+        }
+
+        $text = mb_strtolower(trim($text));
+
+        foreach ([$this->name, ...($this->aliases ?? [])] as $candidate) {
+            $candidate = mb_strtolower(trim((string) $candidate));
+            if ($candidate !== '' && str_contains($text, $candidate)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** "Gon Khaung (aliases: ဂွန်ခေါင်)" — the format the parser prompt expects. */
     public function promptLabel(): string
     {

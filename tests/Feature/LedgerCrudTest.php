@@ -80,6 +80,38 @@ class LedgerCrudTest extends TestCase
         );
     }
 
+    public function test_renaming_away_from_a_contact_drops_the_stale_link(): void
+    {
+        $contact = \App\Models\Contact::factory()->create(['name' => 'Gon Khaung']);
+        $entry = LedgerEntry::factory()->create([
+            'contact_id' => $contact->id, 'title' => 'Gon Khaung', 'direction' => 'payable',
+        ]);
+
+        // Renamed to something unrelated → the link no longer holds.
+        $this->actingAs($this->user)->patch("/ledger/{$entry->id}", [
+            'direction' => 'payable', 'title' => 'မိန်းမ', 'amount_mmk' => 50000,
+        ])->assertRedirect();
+
+        $this->assertNull($entry->fresh()->contact_id);
+    }
+
+    public function test_renaming_that_still_names_the_contact_keeps_the_link(): void
+    {
+        $contact = \App\Models\Contact::factory()->create([
+            'name' => 'Gon Khaung', 'aliases' => ['ဂွန်ခေါင်'],
+        ]);
+        $entry = LedgerEntry::factory()->create([
+            'contact_id' => $contact->id, 'title' => 'Gon Khaung', 'direction' => 'payable',
+        ]);
+
+        // Alias still refers to the same person → keep it.
+        $this->actingAs($this->user)->patch("/ledger/{$entry->id}", [
+            'direction' => 'payable', 'title' => 'ဂွန်ခေါင် ကားချေးငွေ', 'amount_mmk' => 50000,
+        ])->assertRedirect();
+
+        $this->assertSame($contact->id, $entry->fresh()->contact_id);
+    }
+
     public function test_entry_can_be_edited(): void
     {
         $entry = LedgerEntry::factory()->create([

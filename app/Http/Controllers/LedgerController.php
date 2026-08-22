@@ -39,7 +39,17 @@ class LedgerController extends Controller
 
     public function update(Request $request, LedgerEntry $entry): RedirectResponse
     {
-        $entry->update($this->validated($request));
+        $validated = $this->validated($request);
+
+        // A contact is only attached because it matched the original title.
+        // Renaming away from it makes the link a lie, so drop it unless the
+        // new title still refers to that contact (name or alias).
+        if ($entry->contact && $validated['title'] !== $entry->title
+            && ! $entry->contact->matchesName($validated['title'])) {
+            $validated['contact_id'] = null;
+        }
+
+        $entry->update($validated);
 
         return back();
     }
