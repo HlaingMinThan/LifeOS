@@ -83,14 +83,15 @@ class InboxBridge
         $caption = trim($message['caption'] ?? '');
 
         try {
-            $fileInfo = $this->telegram->getFile($photo['file_id']);
+            $bot = $this->telegram->forUser($user);
+            $fileInfo = $bot->getFile($photo['file_id']);
             $filePath = $fileInfo['file_path'] ?? null;
 
             if (! $filePath) {
                 return '⚠️ Could not fetch the photo from Telegram.';
             }
 
-            $imageData = $this->telegram->downloadFile($filePath);
+            $imageData = $bot->downloadFile($filePath);
 
             $ext = pathinfo($filePath, PATHINFO_EXTENSION) ?: 'jpg';
             $storagePath = 'ledger/'.uniqid('tg_').'.'.$ext;
