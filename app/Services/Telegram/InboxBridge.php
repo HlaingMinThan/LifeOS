@@ -97,7 +97,7 @@ class InboxBridge
             Storage::disk('public')->put($storagePath, $imageData);
 
             $parser = app(ClaudeParser::class);
-            $parsed = $parser->parseImage($imageData, $ext, $caption);
+            $parsed = $parser->parseImage($imageData, $ext, $caption, $user);
 
             if ($parsed['action'] === 'unknown' || $parsed['confidence'] < 0.7) {
                 return "🤔 I see the screenshot but couldn't parse the transaction.\nCaption it with details like \"KBZ pay 50k to shop A\" and resend.";

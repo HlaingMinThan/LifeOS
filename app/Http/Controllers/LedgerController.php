@@ -120,7 +120,7 @@ class LedgerController extends Controller
         $storagePath = $file->store('ledger', 'public');
 
         try {
-            $parsed = app(ClaudeParser::class)->parseImage($imageData, $ext);
+            $parsed = app(ClaudeParser::class)->parseImage($imageData, $ext, '', $request->user());
         } catch (\Throwable $e) {
             report($e);
 

@@ -59,7 +59,7 @@ class ClaudeParser implements ParserContract
      * Vision mode: parse a transaction screenshot image.
      * Returns the same schema as parse().
      */
-    public function parseImage(string $imageData, string $ext, string $caption = ''): array
+    public function parseImage(string $imageData, string $ext, string $caption = '', ?User $user = null): array
     {
         $mediaType = match ($ext) {
             'png' => 'image/png',
@@ -92,7 +92,7 @@ class ClaudeParser implements ParserContract
             'model' => config('lifeos.anthropic.model'),
             'max_tokens' => 300,
             'thinking' => ['type' => 'disabled'],
-            'system' => $this->imageSystemPrompt(),
+            'system' => $this->imageSystemPrompt($user),
             'messages' => [['role' => 'user', 'content' => $content]],
         ]);
 
@@ -124,9 +124,11 @@ class ClaudeParser implements ParserContract
         ];
     }
 
-    private function imageSystemPrompt(): string
+    private function imageSystemPrompt(?User $user = null): string
     {
-        $contacts = Contact::all()->map->promptLabel()->implode(', ') ?: '(none yet)';
+        $contacts = $user
+            ? ($user->contacts()->get()->map->promptLabel()->implode(', ') ?: '(none yet)')
+            : '(none yet)';
         $today = now()->toDateString();
 
         return <<<PROMPT
