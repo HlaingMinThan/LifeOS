@@ -85,13 +85,14 @@ class LedgerController extends Controller
         ]);
     }
 
-    /** Day detail: open entries due on this date + settled entries paid on this date. */
+    /** Day detail: all entries tied to this date (due or paid on it). */
     public function day(Request $request, string $date): Response
     {
         $dateStr = now()->parse($date)->toDateString();
         $entries = $request->user()->ledgerEntries();
 
-        $dueOnDay = (clone $entries)->open()->with('contact')
+        // Entries due on this day (any status) + settled entries paid on this day.
+        $dueOnDay = (clone $entries)->with('contact')
             ->whereDate('due_date', $dateStr)->get();
 
         $paidOnDay = (clone $entries)->where('status', 'paid')->with('contact')
@@ -137,6 +138,7 @@ class LedgerController extends Controller
             },
             'title' => $parsed['target'] ?? '',
             'amount_mmk' => $parsed['amount_mmk'] ?? null,
+            'due' => $parsed['due'] ?? now()->toDateString(),
             'note' => $parsed['note'] ?? null,
             'time' => $parsed['time'] ?? null,
             'image' => $storagePath,
@@ -155,9 +157,10 @@ class LedgerController extends Controller
         }
 
         // Screenshot entries are born settled (paid immediately).
+        // Use the due_date as paid_at so it lands on the correct calendar day.
         if ($data['image'] ?? null) {
             $data['status'] = 'paid';
-            $data['paid_at'] = now();
+            $data['paid_at'] = $data['due_date'] ?? now();
         }
 
         $request->user()->ledgerEntries()->create($data);

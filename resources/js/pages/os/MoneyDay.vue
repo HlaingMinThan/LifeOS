@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Check, ImagePlus, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Check, ImagePlus, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import SwipeRow from '@/components/SwipeRow.vue';
@@ -44,8 +44,6 @@ const totalExpense = computed(() =>
 );
 const net = computed(() => totalIncome.value - totalExpense.value);
 
-const toggle = (e: Entry) =>
-    router.patch(`/ledger/${e.id}/toggle`, {}, { preserveScroll: true });
 const remove = (e: Entry) =>
     router.delete(`/ledger/${e.id}`, { preserveScroll: true });
 
@@ -138,7 +136,7 @@ const lightboxSrc = ref<string | null>(null);
             </Link>
             <h1 class="text-2xl font-bold text-gradient-brand">{{ heading }}</h1>
             <p class="mt-1 text-sm text-muted-foreground">
-                Swipe right = paid · swipe left = delete.
+                Daily income & expense. Swipe left to delete.
             </p>
         </div>
         <button
@@ -274,43 +272,23 @@ const lightboxSrc = ref<string | null>(null);
 
     <!-- Income section -->
     <section v-if="incomeEntries.length" class="mt-6">
-        <h2 class="text-sm font-medium text-muted-foreground">Income</h2>
+        <h2 class="text-sm font-medium text-green-500">Income</h2>
         <ul class="mt-2 space-y-2">
             <li v-for="e in incomeEntries" :key="e.id">
-                <SwipeRow @swipe-right="toggle(e)" @swipe-left="remove(e)">
-                    <div
-                        class="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
-                        :class="{ 'opacity-50': e.status !== 'open' }"
-                    >
-                        <button
-                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
-                            :class="
-                                e.status === 'open'
-                                    ? 'border-border text-muted-foreground'
-                                    : 'border-green-500/40 bg-green-500/10 text-green-500'
-                            "
-                            @click="toggle(e)"
-                        >
-                            <RotateCcw v-if="e.status !== 'open'" class="h-4 w-4" />
-                            <Check v-else class="h-4 w-4" />
-                        </button>
+                <SwipeRow @swipe-left="remove(e)">
+                    <div class="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-green-500/40 bg-green-500/10 text-green-500">
+                            <Check class="h-4 w-4" />
+                        </div>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p
-                                    class="truncate text-sm font-medium"
-                                    :class="{ 'line-through': e.status === 'paid' }"
-                                >
-                                    {{ e.title }}
-                                </p>
+                                <p class="truncate text-sm font-medium">{{ e.title }}</p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-green-500">
-                                    {{ e.amount_mmk.toLocaleString() }}
+                                    +{{ e.amount_mmk.toLocaleString() }}
                                 </p>
                             </div>
-                            <p class="text-xs text-muted-foreground">
-                                <span v-if="e.contact && e.contact.name !== e.title">
-                                    {{ e.contact.name }} ·
-                                </span>
-                                {{ e.status === 'paid' ? 'received' : 'expected' }}
+                            <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
+                                {{ e.contact.name }}
                             </p>
                             <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">
                                 {{ e.note }}
@@ -324,9 +302,6 @@ const lightboxSrc = ref<string | null>(null);
                         />
                         <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(e)">
                             <Pencil class="h-4 w-4" />
-                        </button>
-                        <button class="shrink-0 p-2 text-muted-foreground/60" @click="remove(e)">
-                            <Trash2 class="h-4 w-4" />
                         </button>
                     </div>
                 </SwipeRow>
@@ -336,43 +311,23 @@ const lightboxSrc = ref<string | null>(null);
 
     <!-- Expense section -->
     <section v-if="expenseEntries.length" class="mt-6">
-        <h2 class="text-sm font-medium text-muted-foreground">Expense</h2>
+        <h2 class="text-sm font-medium text-rose-400">Expense</h2>
         <ul class="mt-2 space-y-2">
             <li v-for="e in expenseEntries" :key="e.id">
-                <SwipeRow @swipe-right="toggle(e)" @swipe-left="remove(e)">
-                    <div
-                        class="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
-                        :class="{ 'opacity-50': e.status !== 'open' }"
-                    >
-                        <button
-                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
-                            :class="
-                                e.status === 'open'
-                                    ? 'border-border text-muted-foreground'
-                                    : 'border-green-500/40 bg-green-500/10 text-green-500'
-                            "
-                            @click="toggle(e)"
-                        >
-                            <RotateCcw v-if="e.status !== 'open'" class="h-4 w-4" />
-                            <Check v-else class="h-4 w-4" />
-                        </button>
+                <SwipeRow @swipe-left="remove(e)">
+                    <div class="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-rose-400/40 bg-rose-400/10 text-rose-400">
+                            <Check class="h-4 w-4" />
+                        </div>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p
-                                    class="truncate text-sm font-medium"
-                                    :class="{ 'line-through': e.status === 'paid' }"
-                                >
-                                    {{ e.title }}
-                                </p>
+                                <p class="truncate text-sm font-medium">{{ e.title }}</p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-rose-400">
-                                    {{ e.amount_mmk.toLocaleString() }}
+                                    -{{ e.amount_mmk.toLocaleString() }}
                                 </p>
                             </div>
-                            <p class="text-xs text-muted-foreground">
-                                <span v-if="e.contact && e.contact.name !== e.title">
-                                    {{ e.contact.name }} ·
-                                </span>
-                                {{ e.status === 'paid' ? 'paid' : 'to pay' }}
+                            <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
+                                {{ e.contact.name }}
                             </p>
                             <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">
                                 {{ e.note }}
@@ -386,9 +341,6 @@ const lightboxSrc = ref<string | null>(null);
                         />
                         <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(e)">
                             <Pencil class="h-4 w-4" />
-                        </button>
-                        <button class="shrink-0 p-2 text-muted-foreground/60" @click="remove(e)">
-                            <Trash2 class="h-4 w-4" />
                         </button>
                     </div>
                 </SwipeRow>

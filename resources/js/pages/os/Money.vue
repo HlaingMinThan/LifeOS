@@ -151,7 +151,7 @@ async function onScreenshotPick(event: Event) {
         form.direction = data.direction || 'payable';
         form.title = data.title || '';
         form.amount_mmk = data.amount_mmk || null;
-        form.due_date = todayIso;
+        form.due_date = data.due || todayIso;
         form.note = data.note || '';
         storedImagePath.value = data.image;
     } catch {
