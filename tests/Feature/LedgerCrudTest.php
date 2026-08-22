@@ -52,6 +52,34 @@ class LedgerCrudTest extends TestCase
         $this->assertSame('second batch', $entry->note);
     }
 
+    public function test_renaming_an_entry_with_a_linked_contact_is_reflected_everywhere(): void
+    {
+        // Magic-box entries link a contact whose name matches the original
+        // title; the rename must win over that link, in app and digest.
+        $contact = \App\Models\Contact::factory()->create(['name' => 'Cargo Pro']);
+        $entry = LedgerEntry::factory()->create([
+            'contact_id' => $contact->id,
+            'direction' => 'receivable',
+            'title' => 'Cargo Pro',
+            'amount_mmk' => 780000,
+        ]);
+
+        $this->actingAs($this->user)->patch("/ledger/{$entry->id}", [
+            'direction' => 'receivable',
+            'title' => 'Cargo Pro — March delivery batch',
+            'amount_mmk' => 780000,
+        ])->assertRedirect();
+
+        $this->actingAs($this->user)->get('/money')
+            ->assertInertia(fn ($page) => $page
+                ->where('open.0.title', 'Cargo Pro — March delivery batch'));
+
+        $this->assertStringContainsString(
+            'Cargo Pro — March delivery batch',
+            app(\App\Services\DigestBuilder::class)->build(),
+        );
+    }
+
     public function test_entry_can_be_edited(): void
     {
         $entry = LedgerEntry::factory()->create([

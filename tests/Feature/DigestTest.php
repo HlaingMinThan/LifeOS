@@ -16,9 +16,12 @@ class DigestTest extends TestCase
 
     public function test_digest_contains_all_sections(): void
     {
+        // The entry's own title is what shows — a linked contact never overrides
+        // it, so renaming an entry actually takes effect.
         $contact = Contact::factory()->create(['name' => 'Gon Khaung']);
         LedgerEntry::factory()->create([
             'contact_id' => $contact->id, 'direction' => 'payable', 'amount_mmk' => 500000,
+            'title' => 'Gon Khaung car loan',
         ]);
         LedgerEntry::factory()->create(['direction' => 'receivable', 'title' => 'Cargo Pro fee', 'amount_mmk' => 780000]);
         Todo::factory()->create(['title' => 'Renew insurance', 'due_date' => today()->subDays(2)]);
@@ -30,7 +33,7 @@ class DigestTest extends TestCase
         $this->assertStringContainsString('Send flowers', $digest);
         $this->assertStringContainsString('Renew insurance', $digest);
         $this->assertStringContainsString('Ship order', $digest);
-        $this->assertStringContainsString('Gon Khaung — 500,000 Ks', $digest);
+        $this->assertStringContainsString('Gon Khaung car loan — 500,000 Ks', $digest);
         $this->assertStringContainsString('Cargo Pro fee — 780,000 Ks', $digest);
     }
 

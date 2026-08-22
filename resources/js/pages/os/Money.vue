@@ -277,7 +277,7 @@ function saveForm() {
                                         class="truncate text-sm font-medium"
                                         :class="{ 'line-through': e.status === 'paid' }"
                                     >
-                                        {{ e.contact?.name ?? e.title }}
+                                        {{ e.title }}
                                     </p>
                                     <p
                                         class="shrink-0 text-sm font-bold tabular-nums"
@@ -294,6 +294,9 @@ function saveForm() {
                                 </div>
                                 <p class="text-xs text-muted-foreground">
                                     {{ e.direction === 'payable' ? '💸 to pay' : '💰 incoming' }}
+                                    <span v-if="e.contact && e.contact.name !== e.title">
+                                        · {{ e.contact.name }}
+                                    </span>
                                     <span v-if="e.due_date"> · due {{ formatDate(e.due_date) }}</span>
                                     <span v-if="e.status !== 'open'"> · {{ e.status }}</span>
                                 </p>

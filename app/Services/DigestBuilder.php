@@ -116,7 +116,7 @@ class DigestBuilder
             $lines[] = '💵 Money due:';
             foreach ($money as $entry) {
                 $arrow = $entry->direction === 'payable' ? '→ pay' : '← receive';
-                $lines[] = '  • '.($entry->contact?->name ?? $entry->title).' — '
+                $lines[] = '  • '.$entry->title.' — '
                     .number_format($entry->amount_mmk)." Ks {$arrow}";
             }
         }
@@ -134,7 +134,7 @@ class DigestBuilder
     {
         $lines = [];
         foreach ($entries->take(8) as $entry) {
-            $lines[] = '  • '.($entry->contact?->name ?? $entry->title).' — '.number_format($entry->amount_mmk).' Ks';
+            $lines[] = '  • '.$entry->title.' — '.number_format($entry->amount_mmk).' Ks';
         }
         if ($entries->count() > 8) {
             $lines[] = '  … and '.($entries->count() - 8).' more in the app';
