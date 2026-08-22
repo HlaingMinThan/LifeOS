@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Check, ImagePlus, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Check, ImagePlus, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import SwipeRow from '@/components/SwipeRow.vue';
@@ -30,20 +30,38 @@ const heading = computed(() =>
     }),
 );
 
+// Settled entries = Income & Expense
 const incomeEntries = computed(() =>
-    props.entries.filter((e) => e.direction === 'receivable'),
+    props.entries.filter((e) => e.direction === 'receivable' && e.status === 'paid'),
 );
 const expenseEntries = computed(() =>
-    props.entries.filter((e) => e.direction === 'payable'),
+    props.entries.filter((e) => e.direction === 'payable' && e.status === 'paid'),
 );
+
+// Open entries = Receivable & Payable (not yet settled)
+const receivableEntries = computed(() =>
+    props.entries.filter((e) => e.direction === 'receivable' && e.status === 'open'),
+);
+const payableEntries = computed(() =>
+    props.entries.filter((e) => e.direction === 'payable' && e.status === 'open'),
+);
+
 const totalIncome = computed(() =>
     incomeEntries.value.reduce((s, e) => s + e.amount_mmk, 0),
 );
 const totalExpense = computed(() =>
     expenseEntries.value.reduce((s, e) => s + e.amount_mmk, 0),
 );
-const net = computed(() => totalIncome.value - totalExpense.value);
+const totalReceivable = computed(() =>
+    receivableEntries.value.reduce((s, e) => s + e.amount_mmk, 0),
+);
+const totalPayable = computed(() =>
+    payableEntries.value.reduce((s, e) => s + e.amount_mmk, 0),
+);
+const netProfit = computed(() => totalIncome.value - totalExpense.value);
 
+const toggle = (e: Entry) =>
+    router.patch(`/ledger/${e.id}/toggle`, {}, { preserveScroll: true });
 const remove = (e: Entry) =>
     router.delete(`/ledger/${e.id}`, { preserveScroll: true });
 
@@ -136,7 +154,7 @@ const lightboxSrc = ref<string | null>(null);
             </Link>
             <h1 class="text-2xl font-bold text-gradient-brand">{{ heading }}</h1>
             <p class="mt-1 text-sm text-muted-foreground">
-                Daily income & expense. Swipe left to delete.
+                Swipe right = mark done · swipe left = delete.
             </p>
         </div>
         <button
@@ -147,8 +165,8 @@ const lightboxSrc = ref<string | null>(null);
         </button>
     </div>
 
-    <!-- Daily summary -->
-    <div v-if="entries.length" class="mt-4 grid grid-cols-3 gap-2">
+    <!-- Settled summary: Income / Expense / Net Profit -->
+    <div v-if="incomeEntries.length || expenseEntries.length" class="mt-4 grid grid-cols-3 gap-2">
         <div class="rounded-xl border border-border bg-card p-3 text-center">
             <p class="text-xs text-muted-foreground">Income</p>
             <p class="mt-1 text-base font-bold tabular-nums text-green-500">
@@ -162,12 +180,28 @@ const lightboxSrc = ref<string | null>(null);
             </p>
         </div>
         <div class="rounded-xl border border-border bg-card p-3 text-center">
-            <p class="text-xs text-muted-foreground">Net</p>
+            <p class="text-xs text-muted-foreground">Net Profit</p>
             <p
                 class="mt-1 text-base font-bold tabular-nums"
-                :class="net >= 0 ? 'text-green-500' : 'text-rose-400'"
+                :class="netProfit >= 0 ? 'text-green-500' : 'text-rose-400'"
             >
-                {{ (net >= 0 ? '+' : '') + net.toLocaleString() }}
+                {{ (netProfit >= 0 ? '+' : '') + netProfit.toLocaleString() }}
+            </p>
+        </div>
+    </div>
+
+    <!-- Open summary: Receivable / Payable -->
+    <div v-if="receivableEntries.length || payableEntries.length" class="mt-2 grid grid-cols-2 gap-2">
+        <div class="rounded-xl border border-border bg-card p-3 text-center">
+            <p class="text-xs text-muted-foreground">Receivable</p>
+            <p class="mt-1 text-base font-bold tabular-nums text-blue-400">
+                {{ totalReceivable.toLocaleString() }}
+            </p>
+        </div>
+        <div class="rounded-xl border border-border bg-card p-3 text-center">
+            <p class="text-xs text-muted-foreground">Payable</p>
+            <p class="mt-1 text-base font-bold tabular-nums text-orange-400">
+                {{ totalPayable.toLocaleString() }}
             </p>
         </div>
     </div>
@@ -270,19 +304,90 @@ const lightboxSrc = ref<string | null>(null);
         No activity on this day — tap + to add one.
     </div>
 
-    <!-- Income section -->
+    <!-- Receivable (open, expected incoming) -->
+    <section v-if="receivableEntries.length" class="mt-6">
+        <h2 class="text-sm font-medium text-blue-400">Receivable</h2>
+        <ul class="mt-2 space-y-2">
+            <li v-for="e in receivableEntries" :key="e.id">
+                <SwipeRow @swipe-right="toggle(e)" @swipe-left="remove(e)">
+                    <div class="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+                        <button
+                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground"
+                            @click="toggle(e)"
+                        >
+                            <Check class="h-4 w-4" />
+                        </button>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-baseline justify-between gap-2">
+                                <p class="truncate text-sm font-medium">{{ e.title }}</p>
+                                <p class="shrink-0 text-sm font-bold tabular-nums text-blue-400">
+                                    {{ e.amount_mmk.toLocaleString() }}
+                                </p>
+                            </div>
+                            <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
+                                {{ e.contact.name }}
+                            </p>
+                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">{{ e.note }}</p>
+                        </div>
+                        <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(e)">
+                            <Pencil class="h-4 w-4" />
+                        </button>
+                    </div>
+                </SwipeRow>
+            </li>
+        </ul>
+    </section>
+
+    <!-- Payable (open, to pay) -->
+    <section v-if="payableEntries.length" class="mt-6">
+        <h2 class="text-sm font-medium text-orange-400">Payable</h2>
+        <ul class="mt-2 space-y-2">
+            <li v-for="e in payableEntries" :key="e.id">
+                <SwipeRow @swipe-right="toggle(e)" @swipe-left="remove(e)">
+                    <div class="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+                        <button
+                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground"
+                            @click="toggle(e)"
+                        >
+                            <Check class="h-4 w-4" />
+                        </button>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-baseline justify-between gap-2">
+                                <p class="truncate text-sm font-medium">{{ e.title }}</p>
+                                <p class="shrink-0 text-sm font-bold tabular-nums text-orange-400">
+                                    {{ e.amount_mmk.toLocaleString() }}
+                                </p>
+                            </div>
+                            <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
+                                {{ e.contact.name }}
+                            </p>
+                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">{{ e.note }}</p>
+                        </div>
+                        <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(e)">
+                            <Pencil class="h-4 w-4" />
+                        </button>
+                    </div>
+                </SwipeRow>
+            </li>
+        </ul>
+    </section>
+
+    <!-- Income (settled receivable) -->
     <section v-if="incomeEntries.length" class="mt-6">
         <h2 class="text-sm font-medium text-green-500">Income</h2>
         <ul class="mt-2 space-y-2">
             <li v-for="e in incomeEntries" :key="e.id">
-                <SwipeRow @swipe-left="remove(e)">
-                    <div class="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
-                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-green-500/40 bg-green-500/10 text-green-500">
-                            <Check class="h-4 w-4" />
-                        </div>
+                <SwipeRow @swipe-right="toggle(e)" @swipe-left="remove(e)">
+                    <div class="flex items-center gap-3 rounded-xl border border-border bg-card p-3 opacity-75">
+                        <button
+                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-green-500/40 bg-green-500/10 text-green-500"
+                            @click="toggle(e)"
+                        >
+                            <RotateCcw class="h-4 w-4" />
+                        </button>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p class="truncate text-sm font-medium">{{ e.title }}</p>
+                                <p class="truncate text-sm font-medium line-through">{{ e.title }}</p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-green-500">
                                     +{{ e.amount_mmk.toLocaleString() }}
                                 </p>
@@ -290,9 +395,7 @@ const lightboxSrc = ref<string | null>(null);
                             <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
                                 {{ e.contact.name }}
                             </p>
-                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">
-                                {{ e.note }}
-                            </p>
+                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">{{ e.note }}</p>
                         </div>
                         <img
                             v-if="e.image"
@@ -309,19 +412,22 @@ const lightboxSrc = ref<string | null>(null);
         </ul>
     </section>
 
-    <!-- Expense section -->
+    <!-- Expense (settled payable) -->
     <section v-if="expenseEntries.length" class="mt-6">
         <h2 class="text-sm font-medium text-rose-400">Expense</h2>
         <ul class="mt-2 space-y-2">
             <li v-for="e in expenseEntries" :key="e.id">
-                <SwipeRow @swipe-left="remove(e)">
-                    <div class="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
-                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-rose-400/40 bg-rose-400/10 text-rose-400">
-                            <Check class="h-4 w-4" />
-                        </div>
+                <SwipeRow @swipe-right="toggle(e)" @swipe-left="remove(e)">
+                    <div class="flex items-center gap-3 rounded-xl border border-border bg-card p-3 opacity-75">
+                        <button
+                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-rose-400/40 bg-rose-400/10 text-rose-400"
+                            @click="toggle(e)"
+                        >
+                            <RotateCcw class="h-4 w-4" />
+                        </button>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
-                                <p class="truncate text-sm font-medium">{{ e.title }}</p>
+                                <p class="truncate text-sm font-medium line-through">{{ e.title }}</p>
                                 <p class="shrink-0 text-sm font-bold tabular-nums text-rose-400">
                                     -{{ e.amount_mmk.toLocaleString() }}
                                 </p>
@@ -329,9 +435,7 @@ const lightboxSrc = ref<string | null>(null);
                             <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
                                 {{ e.contact.name }}
                             </p>
-                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">
-                                {{ e.note }}
-                            </p>
+                            <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">{{ e.note }}</p>
                         </div>
                         <img
                             v-if="e.image"
