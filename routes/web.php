@@ -14,6 +14,8 @@ Route::middleware(['auth'])->group(function () {
     Route::inertia('/profile', 'os/Profile')->name('profile');
 
     Route::get('/money', [LedgerController::class, 'index'])->name('money');
+    Route::get('/money/day/{date}', [LedgerController::class, 'day'])->name('money.day');
+    Route::post('/ledger/parse-screenshot', [LedgerController::class, 'parseScreenshot'])->name('ledger.parse-screenshot');
     Route::post('/ledger', [LedgerController::class, 'store'])->name('ledger.store');
     Route::patch('/ledger/{entry}/toggle', [LedgerController::class, 'toggle'])->name('ledger.toggle');
     Route::patch('/ledger/{entry}', [LedgerController::class, 'update'])->name('ledger.update');

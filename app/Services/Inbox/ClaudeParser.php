@@ -59,6 +59,111 @@ class ClaudeParser implements ParserContract
     }
 
     /**
+     * Vision mode: parse a transaction screenshot image.
+     * Returns the same schema as parse().
+     */
+    public function parseImage(string $imageData, string $ext, string $caption = ''): array
+    {
+        $mediaType = match ($ext) {
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'gif' => 'image/gif',
+            default => 'image/jpeg',
+        };
+
+        $content = [
+            [
+                'type' => 'image',
+                'source' => [
+                    'type' => 'base64',
+                    'media_type' => $mediaType,
+                    'data' => base64_encode($imageData),
+                ],
+            ],
+            [
+                'type' => 'text',
+                'text' => $caption
+                    ? "This is a transaction screenshot. Caption: \"{$caption}\". Extract the transaction details."
+                    : 'This is a transaction screenshot. Extract the transaction details: who/what, amount, and whether it is income or expense.',
+            ],
+        ];
+
+        $response = Http::withHeaders([
+            'x-api-key' => config('lifeos.anthropic.key'),
+            'anthropic-version' => '2023-06-01',
+        ])->timeout(30)->retry(2, 300)->post('https://api.anthropic.com/v1/messages', [
+            'model' => config('lifeos.anthropic.model'),
+            'max_tokens' => 300,
+            'thinking' => ['type' => 'disabled'],
+            'system' => $this->imageSystemPrompt(),
+            'messages' => [['role' => 'user', 'content' => $content]],
+        ]);
+
+        if ($response->failed()) {
+            throw new RuntimeException(
+                $response->json('error.message') ?? 'Claude API request failed.'
+            );
+        }
+
+        $responseText = collect($response->json('content', []))
+            ->firstWhere('type', 'text')['text'] ?? '';
+
+        $parsed = json_decode($responseText, true);
+
+        if (! is_array($parsed) || ! isset($parsed['action'])) {
+            throw new RuntimeException('Image parser returned invalid JSON.');
+        }
+
+        return [
+            'action' => $parsed['action'],
+            'target' => $parsed['target'] ?? null,
+            'amount_mmk' => $parsed['amount_mmk'] ?? null,
+            'due' => $parsed['due'] ?? now()->toDateString(),
+            'due_time' => null,
+            'bucket' => null,
+            'note' => $parsed['note'] ?? null,
+            'time' => $parsed['time'] ?? null,
+            'confidence' => (float) ($parsed['confidence'] ?? 0),
+        ];
+    }
+
+    private function imageSystemPrompt(): string
+    {
+        $contacts = Contact::all()->map->promptLabel()->implode(', ') ?: '(none yet)';
+        $today = now()->toDateString();
+
+        return <<<PROMPT
+You extract transaction details from screenshot images (bank transfer receipts,
+mobile payment confirmations, etc). The user is in Myanmar and uses KBZ Pay,
+Wave, AYA Pay, CB Pay, and bank transfers.
+
+Today's date: {$today}
+Known contacts: {$contacts}
+
+Burmese number units: သိန်း = 100,000 · သောင်း = 10,000 · ထောင် = 1,000
+
+Look at the screenshot and extract:
+- Who the payment is to/from (match against known contacts if possible)
+- The amount in MMK
+- Whether this is money sent (expense/payable) or received (income/receivable)
+- The transaction note/description/remark (e.g. "lunch", "rent", "phone bill") — this is
+  the purpose of the transaction. Look for fields like "remark", "note", "description",
+  "memo", or the transfer message. If there is a user-written note on the screenshot,
+  extract it verbatim. If none, use null.
+- The transaction time shown on the receipt (e.g. "14:30", "2:30 PM")
+
+Respond with ONLY minified JSON, no markdown:
+{"action": "add_payable" or "add_receivable" or "income_received" or "mark_paid",
+ "target": string, "amount_mmk": int, "due": "{$today}",
+ "note": string|null, "time": "HH:MM"|null, "confidence": 0-1}
+
+If you sent money → "add_payable"
+If you received money → "income_received"
+If the image is unclear or not a transaction → {"action":"unknown","confidence":0}
+PROMPT;
+    }
+
+    /**
      * Batch mode: parse a whole pasted list in one call, so header lines
      * ("မနက်ဖြန်", "for the shop") give context to the lines below them.
      * Returns [['raw_text' => ..., 'parsed' => [...]], ...].

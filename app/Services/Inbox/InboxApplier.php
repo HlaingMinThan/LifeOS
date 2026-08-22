@@ -106,26 +106,40 @@ class InboxApplier
 
         $created = true;
 
-        return LedgerEntry::create([
+        $data = [
             'contact_id' => $this->contactFor($parsed['target'] ?? null)?->id,
             'direction' => 'receivable',
             'title' => $parsed['target'] ?? 'Income',
             'amount_mmk' => $parsed['amount_mmk'] ?? 0,
             'status' => 'paid',
             'paid_at' => now(),
-        ]);
+        ];
+
+        if ($parsed['_image'] ?? null) {
+            $data['image'] = $parsed['_image'];
+        }
+
+        return LedgerEntry::create($data);
     }
 
     private function addLedger(array $parsed, string $direction): LedgerEntry
     {
-        return LedgerEntry::create([
+        $data = [
             'contact_id' => $this->contactFor($parsed['target'] ?? null, createIfMissing: true)?->id,
             'direction' => $direction,
             'title' => $parsed['target'] ?? 'Untitled',
             'amount_mmk' => $parsed['amount_mmk'] ?? 0,
             'status' => 'open',
             'due_date' => $parsed['due'] ?? null,
-        ]);
+        ];
+
+        if ($parsed['_image'] ?? null) {
+            $data['image'] = $parsed['_image'];
+            $data['status'] = 'paid';
+            $data['paid_at'] = now();
+        }
+
+        return LedgerEntry::create($data);
     }
 
     private function addTodo(array $parsed): Todo

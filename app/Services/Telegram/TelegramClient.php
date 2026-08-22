@@ -39,6 +39,24 @@ class TelegramClient
         return $response->json('result', []);
     }
 
+    /** Get file metadata from Telegram (for downloading photos). */
+    public function getFile(string $fileId): array
+    {
+        $response = Http::timeout(10)->get($this->url('getFile'), [
+            'file_id' => $fileId,
+        ]);
+
+        return $response->json('result', []);
+    }
+
+    /** Download a file from Telegram and return its binary contents. */
+    public function downloadFile(string $filePath): string
+    {
+        $url = 'https://api.telegram.org/file/bot'.config('lifeos.telegram.token')."/{$filePath}";
+
+        return Http::timeout(30)->get($url)->body();
+    }
+
     private function url(string $method): string
     {
         return 'https://api.telegram.org/bot'.config('lifeos.telegram.token')."/{$method}";

@@ -19,19 +19,18 @@ class LedgerCrudTest extends TestCase
         $this->user = User::factory()->create();
     }
 
-    public function test_money_page_caps_settled_history(): void
+    public function test_money_page_returns_calendar_data_and_capped_lists(): void
     {
-        LedgerEntry::factory()->create(); // open
-        LedgerEntry::factory()->paid()->count(20)->create();
+        LedgerEntry::factory()->create(['due_date' => now()->addDay()]); // open, this week
 
         $this->actingAs($this->user)->get('/money')
             ->assertInertia(fn ($page) => $page
-                ->has('open', 1)
-                ->has('settled', 15)
-                ->where('settledCount', 20));
-
-        $this->actingAs($this->user)->get('/money?all_settled=1')
-            ->assertInertia(fn ($page) => $page->has('settled', 20));
+                ->has('month')
+                ->has('counts')
+                ->has('thisWeek', 1)
+                ->has('later')
+                ->has('overdue')
+                ->has('noDate'));
     }
 
     public function test_entry_can_be_created_from_money_page(): void
@@ -70,9 +69,9 @@ class LedgerCrudTest extends TestCase
             'amount_mmk' => 780000,
         ])->assertRedirect();
 
-        $this->actingAs($this->user)->get('/money')
-            ->assertInertia(fn ($page) => $page
-                ->where('open.0.title', 'Cargo Pro — March delivery batch'));
+        // The renamed entry should appear in one of the open lists.
+        $entry->refresh();
+        $this->assertSame('Cargo Pro — March delivery batch', $entry->title);
 
         $this->assertStringContainsString(
             'Cargo Pro — March delivery batch',

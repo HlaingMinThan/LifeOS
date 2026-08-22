@@ -7,10 +7,12 @@ use App\Models\Idea;
 use App\Models\InboxEvent;
 use App\Services\DigestBuilder;
 use App\Services\Inbox\BrainDumpParser;
+use App\Services\Inbox\ClaudeParser;
 use App\Services\Inbox\InboxApplier;
 use App\Services\Inbox\ParserContract;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -37,6 +39,7 @@ class InboxBridge
         private BrainDumpParser $dumpParser,
         private InboxApplier $applier,
         private DigestBuilder $digest,
+        private TelegramClient $telegram,
     ) {}
 
     /** Returns the reply text, or null when the message should be ignored. */
@@ -45,6 +48,11 @@ class InboxBridge
         $chatId = (string) ($message['chat']['id'] ?? '');
         if ($chatId !== (string) config('lifeos.telegram.chat_id')) {
             return null; // single-user app: ignore strangers
+        }
+
+        // Photo messages: download the image and parse with Claude vision.
+        if (! empty($message['photo'])) {
+            return $this->handlePhoto($message);
         }
 
         $text = trim($message['text'] ?? '');
@@ -64,6 +72,57 @@ class InboxBridge
             'undo' => $this->undoLatest(),
             default => $this->freeText($text),
         };
+    }
+
+    private function handlePhoto(array $message): string
+    {
+        // Telegram sends multiple sizes; pick the largest.
+        $photos = $message['photo'];
+        $photo = end($photos);
+        $caption = trim($message['caption'] ?? '');
+
+        try {
+            $fileInfo = $this->telegram->getFile($photo['file_id']);
+            $filePath = $fileInfo['file_path'] ?? null;
+
+            if (! $filePath) {
+                return '⚠️ Could not fetch the photo from Telegram.';
+            }
+
+            $imageData = $this->telegram->downloadFile($filePath);
+
+            // Store locally.
+            $ext = pathinfo($filePath, PATHINFO_EXTENSION) ?: 'jpg';
+            $storagePath = 'ledger/'.uniqid('tg_').'.'.$ext;
+            Storage::disk('public')->put($storagePath, $imageData);
+
+            // Parse with Claude vision.
+            $parser = app(ClaudeParser::class);
+            $parsed = $parser->parseImage($imageData, $ext, $caption);
+
+            if ($parsed['action'] === 'unknown' || $parsed['confidence'] < 0.7) {
+                // Still keep the image for manual review.
+                return "🤔 I see the screenshot but couldn't parse the transaction.\nCaption it with details like \"KBZ pay 50k to shop A\" and resend.";
+            }
+
+            // Apply with the saved image path.
+            $parsed['_image'] = $storagePath;
+            $this->applier->apply($parsed, $caption ?: 'Screenshot transaction');
+
+            $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
+            $amount = $parsed['amount_mmk'] ? ' · '.number_format($parsed['amount_mmk']).' Ks' : '';
+
+            return implode("\n", array_filter([
+                "✅ {$label}",
+                ($parsed['target'] ?? '').$amount,
+                $this->fmtDue($parsed),
+                'Wrong? /undo',
+            ]));
+        } catch (Throwable $e) {
+            report($e);
+
+            return '⚠️ Could not process the screenshot — try again or add a caption with details.';
+        }
     }
 
     private function freeText(string $text): string
