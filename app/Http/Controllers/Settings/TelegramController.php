@@ -39,6 +39,7 @@ class TelegramController extends Controller
             // Real delivery state, so "Connected" can't claim a bot works when no
             // webhook points here (the state a migrated-in account lands in).
             'webhook' => $this->webhookState($user),
+            'authorizedChats' => $user->telegram_authorized_chats ?? [],
         ]);
     }
 
@@ -223,6 +224,42 @@ class TelegramController extends Controller
             'telegram_webhook_secret' => null,
             'telegram_linked_at' => null,
         ])->save();
+
+        return back();
+    }
+
+    /** Add a chat ID to the authorized list. */
+    public function addAuthorizedChat(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'chat_id' => ['required', 'string', 'max:50'],
+        ]);
+
+        $user = $request->user();
+        $chats = $user->telegram_authorized_chats ?? [];
+
+        if (! in_array($validated['chat_id'], $chats)) {
+            $chats[] = $validated['chat_id'];
+            $user->forceFill(['telegram_authorized_chats' => $chats])->save();
+        }
+
+        return back();
+    }
+
+    /** Remove a chat ID from the authorized list. */
+    public function removeAuthorizedChat(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'chat_id' => ['required', 'string'],
+        ]);
+
+        $user = $request->user();
+        $chats = array_values(array_filter(
+            $user->telegram_authorized_chats ?? [],
+            fn ($id) => $id !== $validated['chat_id'],
+        ));
+
+        $user->forceFill(['telegram_authorized_chats' => $chats])->save();
 
         return back();
     }

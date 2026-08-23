@@ -29,6 +29,7 @@ use NotificationChannels\WebPush\HasPushSubscriptions;
  * @property string|null $telegram_bot_token
  * @property string|null $telegram_bot_username
  * @property string|null $telegram_chat_id
+ * @property array|null $telegram_authorized_chats
  * @property string|null $telegram_webhook_secret
  * @property Carbon|null $telegram_linked_at
  * @property Carbon|null $telegram_prompt_dismissed_at
@@ -60,6 +61,7 @@ class User extends Authenticatable implements PasskeyUser
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'telegram_bot_token' => 'encrypted',
+            'telegram_authorized_chats' => 'array',
             'telegram_linked_at' => 'datetime',
             'telegram_prompt_dismissed_at' => 'datetime',
             'notification_prompt_dismissed_at' => 'datetime',
@@ -70,6 +72,16 @@ class User extends Authenticatable implements PasskeyUser
     public function hasTelegram(): bool
     {
         return filled($this->telegram_bot_token) && filled($this->telegram_chat_id);
+    }
+
+    /** Is this chat_id the owner or an authorized collaborator? */
+    public function isTelegramAuthorized(string $chatId): bool
+    {
+        if ((string) $this->telegram_chat_id === $chatId) {
+            return true;
+        }
+
+        return in_array($chatId, $this->telegram_authorized_chats ?? []);
     }
 
     /** @return HasMany<Todo, $this> */

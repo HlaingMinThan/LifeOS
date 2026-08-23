@@ -47,11 +47,6 @@ class InboxBridge
      */
     public function handle(array $message, User $user): ?string
     {
-        $chatId = (string) ($message['chat']['id'] ?? '');
-        if ($chatId !== (string) $user->telegram_chat_id) {
-            return null; // each bot answers only to the chat it was linked to
-        }
-
         // Photo messages: download the image and parse with Claude vision.
         // Telegram sends compressed images as 'photo' and file-attached images as 'document'.
         if (! empty($message['photo'])) {

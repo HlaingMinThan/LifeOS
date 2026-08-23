@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Check, Send } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { ArrowLeft, Check, Plus, Send, Trash2 } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{
     hasToken: boolean;
@@ -10,6 +10,7 @@ const props = defineProps<{
     linkedAt: string | null;
     usesWebhook: boolean;
     webhook: { registered: boolean; error: string | null } | null;
+    authorizedChats: string[];
 }>();
 
 // Three states, in order: no token → token but no chat → connected.
@@ -33,6 +34,22 @@ const tokenForm = useForm({ token: '' });
 const detectForm = useForm({});
 const disconnectForm = useForm({});
 const webhookForm = useForm({});
+
+const newChatId = ref('');
+const addChat = () => {
+    if (!newChatId.value.trim()) return;
+    router.post(
+        '/settings/telegram/authorized-chats',
+        { chat_id: newChatId.value.trim() },
+        { preserveScroll: true },
+    );
+    newChatId.value = '';
+};
+const removeChat = (chatId: string) =>
+    router.delete('/settings/telegram/authorized-chats', {
+        data: { chat_id: chatId },
+        preserveScroll: true,
+    });
 
 const saveToken = () =>
     tokenForm.post('/settings/telegram/token', { preserveScroll: true });
@@ -142,6 +159,47 @@ const webhookHealthy = computed(
                     </button>
                 </template>
             </div>
+        </div>
+
+        <!-- Authorized collaborators -->
+        <div class="rounded-xl border border-border bg-card p-4">
+            <p class="text-sm font-medium">Shared Access</p>
+            <p class="mt-1 text-xs text-muted-foreground">
+                Let others use this bot. They message the bot, it shows their
+                chat ID. Paste it here to authorize them.
+            </p>
+
+            <div v-if="authorizedChats.length" class="mt-3 space-y-1.5">
+                <div
+                    v-for="chat in authorizedChats"
+                    :key="chat"
+                    class="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-1.5"
+                >
+                    <code class="text-xs">{{ chat }}</code>
+                    <button
+                        class="text-muted-foreground hover:text-destructive"
+                        @click="removeChat(chat)"
+                    >
+                        <Trash2 class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            </div>
+
+            <form class="mt-3 flex gap-2" @submit.prevent="addChat">
+                <input
+                    v-model="newChatId"
+                    type="text"
+                    placeholder="Chat ID"
+                    class="flex-1 rounded-lg border border-input bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button
+                    type="submit"
+                    class="flex items-center gap-1 rounded-lg border border-input px-3 py-1.5 text-sm disabled:opacity-50"
+                    :disabled="!newChatId.trim()"
+                >
+                    <Plus class="h-3.5 w-3.5" /> Add
+                </button>
+            </form>
         </div>
 
         <button

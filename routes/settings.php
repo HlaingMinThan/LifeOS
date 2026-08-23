@@ -25,6 +25,10 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('throttle:20,1')
         ->name('telegram.webhook-register');
     Route::delete('settings/telegram', [TelegramController::class, 'destroy'])->name('telegram.destroy');
+    Route::post('settings/telegram/authorized-chats', [TelegramController::class, 'addAuthorizedChat'])
+        ->name('telegram.authorized-chats.add');
+    Route::delete('settings/telegram/authorized-chats', [TelegramController::class, 'removeAuthorizedChat'])
+        ->name('telegram.authorized-chats.remove');
     Route::patch('settings/telegram/dismiss', [TelegramController::class, 'dismissPrompt'])
         ->name('telegram.dismiss');
 

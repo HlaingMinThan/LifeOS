@@ -39,6 +39,16 @@ class TelegramWebhookController extends Controller
 
         $update = $request->all();
         $updateId = $update['update_id'] ?? null;
+        $senderChatId = (string) ($update['message']['chat']['id'] ?? '');
+
+        // Verify the sender is the owner or an authorized collaborator.
+        if ($senderChatId && ! $user->isTelegramAuthorized($senderChatId)) {
+            // Unknown sender: tell them their chat ID so the owner can authorize them.
+            $telegram->forToken($user->telegram_bot_token, $senderChatId)
+                ->send("⚠️ You're not authorized.\nAsk the bot owner to add your chat ID: {$senderChatId}");
+
+            return response()->noContent();
+        }
 
         // Telegram retries anything it does not see a 200 for, so the same update
         // can arrive twice. Cache::add is atomic — only the first caller applies
@@ -46,16 +56,19 @@ class TelegramWebhookController extends Controller
         $fresh = $updateId === null
             || Cache::add("telegram:seen:{$user->id}:{$updateId}", true, now()->addHour());
 
+        // Reply to the sender's chat, not necessarily the owner's.
+        $replyClient = $telegram->forToken($user->telegram_bot_token, $senderChatId);
+
         if ($fresh && isset($update['message'])) {
             try {
                 $reply = $bridge->handle($update['message'], $user);
 
                 if ($reply !== null) {
-                    $telegram->forUser($user)->send($reply);
+                    $replyClient->send($reply);
                 }
             } catch (Throwable $e) {
                 report($e);
-                $telegram->forUser($user)->send('⚠️ Something went wrong — check the app.');
+                $replyClient->send('⚠️ Something went wrong — check the app.');
             }
         }
 
