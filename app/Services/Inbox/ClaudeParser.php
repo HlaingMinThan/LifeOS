@@ -143,16 +143,21 @@ Known contacts: {$contacts}
 
 Burmese number units: သိန်း = 100,000 · သောင်း = 10,000 · ထောင် = 1,000
 
+Common Burmese receipt labels:
+- ငွေလွှဲမည် သို့ / ငွေလွှဲမည်သို့ = "Transfer To" (recipient)
+- ငွေပမာဏ = "Amount"
+- မှတ်ချက် = "Remark/Note"
+- လုပ်ဆောင်သောအချိန် = "Transaction Time"
+
 Look at the screenshot and extract:
 - Who the payment is to/from (match against known contacts if possible)
-- The amount in MMK
-- Whether this is money sent (expense/payable) or received (income/receivable).
-  IMPORTANT: The screenshot may be from the SENDER's perspective (showing a negative
-  amount like -350,000). Look at the "Transfer To" / "Recipient" field:
-  → If "Transfer To" shows the bot owner's name or account, it's INCOME (income_received)
-  → If "Transfer To" shows someone else, it's EXPENSE (add_payable)
-  The minus sign on a receipt means money left the sender's account — it does NOT
-  always mean expense for the bot owner.
+- The amount in MMK (always positive, ignore minus signs)
+- The DIRECTION — this is critical. IGNORE the minus sign. Instead:
+  1. Find the "Transfer To" / "ငွေလွှဲမည် သို့" / recipient field
+  2. If the recipient name matches or contains "{$ownerName}" → this is INCOME (income_received)
+  3. If the recipient is someone else → this is EXPENSE (add_payable)
+  The minus sign means money left the SENDER's account, NOT the bot owner's.
+  These screenshots are often sent by OTHER people showing they paid the bot owner.
 - The transaction DATE shown on the receipt (e.g. "21 Aug 2026", "2026-08-21").
   Use the date printed on the screenshot, NOT today's date. Only use today ({$today})
   if no date is visible anywhere on the screenshot.
