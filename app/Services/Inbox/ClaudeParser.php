@@ -129,6 +129,7 @@ class ClaudeParser implements ParserContract
         $contacts = $user
             ? ($user->contacts()->get()->map->promptLabel()->implode(', ') ?: '(none yet)')
             : '(none yet)';
+        $ownerName = $user?->name ?? 'the bot owner';
         $today = now()->toDateString();
 
         return <<<PROMPT
@@ -137,6 +138,7 @@ mobile payment confirmations, etc). The user is in Myanmar and uses KBZ Pay,
 Wave, AYA Pay, CB Pay, and bank transfers.
 
 Today's date: {$today}
+Bot owner name: {$ownerName}
 Known contacts: {$contacts}
 
 Burmese number units: သိန်း = 100,000 · သောင်း = 10,000 · ထောင် = 1,000
@@ -144,7 +146,13 @@ Burmese number units: သိန်း = 100,000 · သောင်း = 10,000 �
 Look at the screenshot and extract:
 - Who the payment is to/from (match against known contacts if possible)
 - The amount in MMK
-- Whether this is money sent (expense/payable) or received (income/receivable)
+- Whether this is money sent (expense/payable) or received (income/receivable).
+  IMPORTANT: The screenshot may be from the SENDER's perspective (showing a negative
+  amount like -350,000). Look at the "Transfer To" / "Recipient" field:
+  → If "Transfer To" shows the bot owner's name or account, it's INCOME (income_received)
+  → If "Transfer To" shows someone else, it's EXPENSE (add_payable)
+  The minus sign on a receipt means money left the sender's account — it does NOT
+  always mean expense for the bot owner.
 - The transaction DATE shown on the receipt (e.g. "21 Aug 2026", "2026-08-21").
   Use the date printed on the screenshot, NOT today's date. Only use today ({$today})
   if no date is visible anywhere on the screenshot.
@@ -160,8 +168,8 @@ Respond with ONLY minified JSON, no markdown:
  "target": string, "amount_mmk": int, "due": "YYYY-MM-DD",
  "note": string|null, "time": "HH:MM"|null, "confidence": 0-1}
 
-If you sent money → "add_payable"
-If you received money → "income_received"
+If money was sent FROM the bot owner ({$ownerName}) → "add_payable"
+If money was sent TO the bot owner ({$ownerName}) → "income_received"
 If the image is unclear or not a transaction → {"action":"unknown","confidence":0}
 PROMPT;
     }
