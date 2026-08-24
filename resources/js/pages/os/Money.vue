@@ -106,6 +106,7 @@ function startEdit(e: Entry) {
     storedImagePath.value = null;
     parsedTime.value = null;
     parseError.value = null;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function closeForm() {

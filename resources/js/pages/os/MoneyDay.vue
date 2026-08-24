@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Check, ImagePlus, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-vue-next';
-import { computed, reactive, ref } from 'vue';
+import { computed, nextTick, reactive, ref } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import SwipeRow from '@/components/SwipeRow.vue';
 import { formatMmk } from '@/lib/format';
@@ -114,6 +114,7 @@ function startEdit(e: Entry) {
     form.note = e.note ?? '';
     imageFile.value = null;
     imagePreview.value = e.image ? `/storage/${e.image}` : null;
+    nextTick(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
 }
 
 function closeForm() {
