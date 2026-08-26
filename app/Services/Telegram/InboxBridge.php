@@ -118,10 +118,13 @@ class InboxBridge
             $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
             $amount = $parsed['amount_mmk'] ? ' · '.number_format($parsed['amount_mmk']).' Ks' : '';
 
+            $note = $parsed['note'] ?? null;
+
             return implode("\n", array_filter([
                 "✅ {$label}",
                 ($parsed['target'] ?? '').$amount,
                 $this->fmtDue($parsed),
+                $note ? "📝 {$note}" : null,
                 'Wrong? /undo',
             ]));
         } catch (Throwable $e) {
