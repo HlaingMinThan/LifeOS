@@ -108,6 +108,11 @@ class InboxBridge
             }
 
             $parsed['_image'] = $storagePath;
+
+            if ($caption !== '') {
+                $parsed['note'] = $caption;
+            }
+
             $this->applier->apply($parsed, $caption ?: 'Screenshot transaction', $user);
 
             $label = self::ACTION_LABELS[$parsed['action']] ?? $parsed['action'];
