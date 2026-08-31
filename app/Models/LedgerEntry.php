@@ -39,6 +39,33 @@ class LedgerEntry extends Model
         return $this->belongsTo(Contact::class);
     }
 
+    /**
+     * Which recurring merchant this entry belongs to.
+     *
+     * A linked contact is the strongest signal and survives spelling drift, so
+     * it wins. Otherwise the first two words of the title stand in: branches
+     * and reference numbers trail the merchant name ("Max Energy-Thein Phyu",
+     * "Buy DataPack U9 (0994…)"), so the head of the string is the part that
+     * repeats. Both detection and rule lookup derive the key here, so they can
+     * never disagree about what counts as the same merchant.
+     */
+    public function clusterKey(): string
+    {
+        if ($this->contact_id) {
+            return "contact:{$this->contact_id}";
+        }
+
+        $words = preg_split('/[\s\-]+/', trim((string) $this->title), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return 'title:'.mb_strtolower(implode(' ', array_slice($words, 0, 2)));
+    }
+
+    /** How the merchant is named to the user. */
+    public function clusterLabel(): string
+    {
+        return $this->contact?->name ?: $this->title;
+    }
+
     public function scopeOpen(Builder $query): Builder
     {
         return $query->where('status', 'open');

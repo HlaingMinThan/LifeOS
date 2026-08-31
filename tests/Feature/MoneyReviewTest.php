@@ -623,7 +623,12 @@ class MoneyReviewTest extends TestCase
 
     public function test_a_blank_category_is_stored_as_null_not_empty_string(): void
     {
-        $entry = LedgerEntry::factory()->for($this->user)->create(['category' => 'Food']);
+        // A title the categorizer cannot place, so the clearing is what the
+        // assertion sees — the factory's random title would sometimes match a
+        // keyword and get relabelled before the test looked.
+        $entry = LedgerEntry::factory()->for($this->user)->create([
+            'title' => 'zzz nothing matches this', 'category' => 'Food',
+        ]);
 
         $this->actingAs($this->user)->patch("/ledger/{$entry->id}", [
             'direction' => 'payable', 'title' => $entry->title,

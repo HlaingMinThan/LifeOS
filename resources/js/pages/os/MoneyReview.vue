@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, TrendingDown, TrendingUp } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import {
+    ArrowLeft,
+    ChevronLeft,
+    ChevronRight,
+    Loader2,
+    Pencil,
+    Sparkles,
+    TrendingDown,
+    TrendingUp,
+} from 'lucide-vue-next';
+import { computed, reactive, ref } from 'vue';
+import { apiPost } from '@/lib/api';
 import { formatMmk } from '@/lib/format';
 
 type CategoryMember = { category: string; count: number; total: number };
@@ -21,6 +31,15 @@ type Period = {
     categories: Category[];
     label?: string;
 };
+type Pattern = {
+    key: string;
+    label: string;
+    count: number;
+    total: number;
+    current: string[];
+    conflicted: boolean;
+    unlabelled: boolean;
+};
 type Bucket = { count: number; total: number };
 type Outstanding = Record<
     'overdue' | 'this_week' | 'later' | 'no_date',
@@ -38,6 +57,7 @@ const props = defineProps<{
     lastWeek: Period & { label: string };
     outstanding: Outstanding;
     indicator: { level: string; emoji: string; message: string };
+    patterns: Pattern[];
 }>();
 
 // Colour tracks meaning, not sign: for expenses "up" is bad, for income good.
@@ -92,6 +112,48 @@ const owedRows = computed(() =>
             .filter((r) => r.count > 0),
     ),
 );
+
+// --- Repeating merchants filed inconsistently ---
+// Detection arrived free with the page; naming is the only step that costs,
+// so it waits for a tap.
+const drafts = reactive<Record<string, string>>({});
+const naming = ref(false);
+const nameError = ref('');
+
+async function nameAll() {
+    naming.value = true;
+    nameError.value = '';
+    try {
+        const res = await apiPost<{ suggestions: Record<string, string> }>(
+            '/money/patterns/name',
+            {},
+        );
+        for (const [key, category] of Object.entries(res.suggestions)) {
+            drafts[key] = category;
+        }
+    } catch (e) {
+        nameError.value = (e as Error).message;
+    } finally {
+        naming.value = false;
+    }
+}
+
+function applyPattern(p: Pattern) {
+    const category = drafts[p.key]?.trim();
+    if (!category) return;
+    router.post(
+        '/money/patterns/apply',
+        { key: p.key, category, label: p.label },
+        { preserveScroll: true },
+    );
+}
+
+const dismissPattern = (p: Pattern) =>
+    router.post(
+        '/money/patterns/dismiss',
+        { key: p.key, label: p.label },
+        { preserveScroll: true },
+    );
 
 const otherOpen = ref(false);
 const toggleOther = () => (otherOpen.value = !otherOpen.value);
@@ -219,6 +281,72 @@ function saveRename() {
             {{ monthly.change.income >= 0 ? 'up' : 'down' }}
         </span>
     </div>
+
+    <!-- Recurring merchants filed inconsistently -->
+    <section v-if="patterns.length" class="mt-6">
+        <div class="flex items-center justify-between">
+            <h2 class="text-sm font-medium text-muted-foreground">
+                {{ patterns.length }} repeating
+                {{ patterns.length === 1 ? 'merchant needs' : 'merchants need' }} a category
+            </h2>
+            <button
+                class="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-muted-foreground disabled:opacity-50"
+                :disabled="naming"
+                @click="nameAll"
+            >
+                <Loader2 v-if="naming" class="h-3 w-3 animate-spin" />
+                <Sparkles v-else class="h-3 w-3" />
+                {{ naming ? 'Thinking…' : 'Suggest names' }}
+            </button>
+        </div>
+        <p v-if="nameError" class="mt-1 text-xs text-rose-400">{{ nameError }}</p>
+
+        <ul class="mt-2 space-y-2">
+            <li
+                v-for="p in patterns"
+                :key="p.key"
+                class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3"
+            >
+                <div class="flex items-baseline justify-between gap-2">
+                    <p class="min-w-0 truncate text-sm font-medium">{{ p.label }}</p>
+                    <span class="shrink-0 text-sm font-bold tabular-nums text-rose-400">
+                        {{ p.total.toLocaleString() }}
+                    </span>
+                </div>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    {{ p.count }} entries ·
+                    <template v-if="p.conflicted">
+                        split across
+                        <span class="font-medium text-amber-500">{{ p.current.join(', ') }}</span>
+                    </template>
+                    <template v-else>all unlabelled</template>
+                </p>
+
+                <div class="mt-2 flex items-center gap-2">
+                    <input
+                        v-model="drafts[p.key]"
+                        type="text"
+                        placeholder="Category name"
+                        class="min-w-0 flex-1 rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        @keyup.enter="applyPattern(p)"
+                    />
+                    <button
+                        class="shrink-0 rounded-lg bg-gradient-brand px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                        :disabled="!drafts[p.key]?.trim()"
+                        @click="applyPattern(p)"
+                    >
+                        Move all
+                    </button>
+                    <button
+                        class="shrink-0 rounded-lg border border-border px-2 py-1.5 text-xs text-muted-foreground"
+                        @click="dismissPattern(p)"
+                    >
+                        Ignore
+                    </button>
+                </div>
+            </li>
+        </ul>
+    </section>
 
     <!-- Where the money went -->
     <section class="mt-6">

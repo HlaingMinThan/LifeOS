@@ -34,6 +34,10 @@ Route::middleware(['auth'])->group(function () {
     // ?name= rather than a path segment: category labels carry spaces and "&".
     Route::get('/money/category', [ReviewController::class, 'category'])->name('money.category');
     Route::post('/money/categories/rename', [ReviewController::class, 'rename'])->name('money.categories.rename');
+    // Detection is free and rides on the review page; only naming costs.
+    Route::post('/money/patterns/name', [ReviewController::class, 'nameSuggestions'])->name('money.patterns.name');
+    Route::post('/money/patterns/apply', [ReviewController::class, 'applySuggestion'])->name('money.patterns.apply');
+    Route::post('/money/patterns/dismiss', [ReviewController::class, 'dismissSuggestion'])->name('money.patterns.dismiss');
     Route::get('/money/day/{date}', [LedgerController::class, 'day'])->name('money.day');
     Route::post('/ledger/parse-screenshot', [LedgerController::class, 'parseScreenshot'])->name('ledger.parse-screenshot');
     Route::post('/ledger', [LedgerController::class, 'store'])->name('ledger.store');
