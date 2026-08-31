@@ -82,6 +82,30 @@ class TeamAssignmentTest extends TestCase
         $this->assertSame('accepted', TeamMember::first()->fresh()->status);
     }
 
+    public function test_removing_and_reinviting_keeps_the_link_already_shared(): void
+    {
+        $team = app(TeamService::class);
+        $original = $team->invite($this->owner, 'abc@example.com')->token;
+
+        // Remove them, then invite the same address again — a link already
+        // pasted into a chat must not quietly stop working.
+        $team->revoke(TeamMember::first());
+        $reissued = $team->invite($this->owner, 'abc@example.com')->token;
+
+        $this->assertSame($original, $reissued);
+        $this->assertSame(1, TeamMember::count());
+        $this->get("/invite/{$original}")->assertRedirect();
+    }
+
+    public function test_an_unknown_link_explains_itself_instead_of_404ing(): void
+    {
+        $this->actingAs($this->member)->get('/invite/'.str_repeat('x', 48))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('os/Invitation')
+                ->where('status', 'invalid'));
+    }
+
     // --- mentions --------------------------------------------------------
 
     public function test_mention_resolves_a_teammate_and_strips_the_handle(): void

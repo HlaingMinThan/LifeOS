@@ -38,14 +38,17 @@ class TeamService
 
         $invitee = User::where('email', $email)->first();
 
-        // Re-inviting a revoked or still-pending address reissues the token
-        // rather than colliding with the (owner_id, email) unique key.
+        // Re-inviting a revoked or still-pending address reuses the same row
+        // (the (owner_id, email) unique key) and — importantly — keeps its
+        // token: a link already sent by hand must not die because the invite
+        // was resent or the person was removed and added back. The address is
+        // re-checked on accept, so an old link is no more powerful than a new one.
         $invitation = $existing ?? $owner->teamMembers()->make();
         $invitation->fill([
             'email' => $email,
             'member_id' => $invitee?->id,
             'status' => 'pending',
-            'token' => TeamMember::newToken(),
+            'token' => $invitation->token ?: TeamMember::newToken(),
             'accepted_at' => null,
         ]);
         $invitation->owner()->associate($owner);

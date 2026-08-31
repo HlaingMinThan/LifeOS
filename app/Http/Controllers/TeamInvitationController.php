@@ -20,7 +20,20 @@ class TeamInvitationController extends Controller
      */
     public function show(Request $request, string $token): Response|RedirectResponse
     {
-        $invitation = TeamMember::where('token', $token)->with('owner')->firstOrFail();
+        $invitation = TeamMember::where('token', $token)->with('owner')->first();
+
+        // A stale link (withdrawn, or from before this invite was reissued)
+        // deserves an explanation rather than a bare 404 — the person opening
+        // it did nothing wrong and has no idea what happened.
+        if (! $invitation) {
+            return Inertia::render('os/Invitation', [
+                'token' => $token,
+                'ownerName' => null,
+                'email' => null,
+                'status' => 'invalid',
+                'mismatch' => false,
+            ]);
+        }
 
         if (! $request->user()) {
             // Fortify consumes url.intended after login *or* registration, so
