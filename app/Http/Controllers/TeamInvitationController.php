@@ -95,10 +95,13 @@ class TeamInvitationController extends Controller
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => __("Welcome! Your password is \"{$password}\" — change it in Profile → Security."),
+            'message' => __("Welcome! Your password is \"{$password}\" — change it under Security."),
         ]);
 
-        return redirect()->route('home');
+        // Land on settings the first (and only) time this runs, so their name
+        // and password are the first things they can put right. Later sign-ins
+        // go to the Life OS home like everyone else.
+        return redirect()->route('profile.edit');
     }
 
     /** "zayar.win@example.com" → "Zayar Win", so the greeting is not an address. */

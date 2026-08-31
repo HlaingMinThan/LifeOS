@@ -195,8 +195,9 @@ class TeamAssignmentTest extends TestCase
         $token = app(TeamService::class)
             ->invite($this->owner, 'zayar.win@example.com')->token;
 
-        // No form: the link is the whole onboarding.
-        $this->get("/invite/{$token}")->assertRedirect(route('home'));
+        // No form: the link is the whole onboarding, landing on settings so
+        // they can fix their name and replace the default password.
+        $this->get("/invite/{$token}")->assertRedirect(route('profile.edit'));
 
         $invitee = User::where('email', 'zayar.win@example.com')->first();
         $this->assertNotNull($invitee);
