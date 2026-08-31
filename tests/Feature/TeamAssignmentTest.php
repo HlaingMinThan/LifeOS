@@ -11,6 +11,7 @@ use App\Services\Team\MentionResolver;
 use App\Services\Team\TeamService;
 use App\Services\Telegram\InboxBridge;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
@@ -189,17 +190,37 @@ class TeamAssignmentTest extends TestCase
         $this->assertSame(0, Todo::count());
     }
 
-    public function test_guest_opening_an_invite_returns_to_it_after_signing_up(): void
+    public function test_opening_an_invite_signs_the_new_person_up_and_logs_them_in(): void
     {
         $token = app(TeamService::class)
-            ->invite($this->owner, 'new@example.com')->token;
+            ->invite($this->owner, 'zayar.win@example.com')->token;
 
-        // As a guest — no actingAs, so the invite must send them to register.
-        $this->get("/invite/{$token}")
-            ->assertRedirect(route('register', ['email' => 'new@example.com']));
+        // No form: the link is the whole onboarding.
+        $this->get("/invite/{$token}")->assertRedirect(route('home'));
 
-        // Fortify consumes url.intended after registering, landing them back.
-        $this->assertSame(route('team.invitation.show', $token), session('url.intended'));
+        $invitee = User::where('email', 'zayar.win@example.com')->first();
+        $this->assertNotNull($invitee);
+        $this->assertAuthenticatedAs($invitee);
+        $this->assertSame('Zayar Win', $invitee->name);
+        $this->assertTrue(Hash::check(config('lifeos.invite_password'), $invitee->password));
+
+        // Already on the team, and able to reach the page that changes the
+        // default password (which is gated on a verified address).
+        $this->assertTrue($this->owner->fresh()->canAssignTo($invitee));
+        $this->assertNotNull($invitee->email_verified_at);
+    }
+
+    public function test_an_invite_never_logs_into_an_account_that_already_exists(): void
+    {
+        // Otherwise a forwarded link would be an account takeover.
+        $token = app(TeamService::class)->invite($this->owner, $this->member->email)->token;
+
+        $this->get("/invite/{$token}")->assertRedirect(
+            route('login', ['email' => $this->member->email]),
+        );
+
+        $this->assertGuest();
+        $this->assertSame('pending', TeamMember::first()->status);
     }
 
     // --- the privacy boundary -------------------------------------------
