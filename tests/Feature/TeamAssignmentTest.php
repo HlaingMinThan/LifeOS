@@ -227,6 +227,47 @@ class TeamAssignmentTest extends TestCase
         $this->assertSame('pending', TeamMember::first()->status);
     }
 
+    public function test_team_add_command_creates_a_usable_account(): void
+    {
+        // The manual-DB-edit trap: an "accepted" row with no member_id has no
+        // account behind it. This command does the whole job instead.
+        $this->artisan('team:add', [
+            'owner' => $this->owner->email,
+            'member' => 'zayarwin@gmail.com',
+        ])->assertSuccessful();
+
+        $member = User::where('email', 'zayarwin@gmail.com')->first();
+        $this->assertNotNull($member);
+        $this->assertTrue(Hash::check(config('lifeos.invite_password'), $member->password));
+        $this->assertTrue($this->owner->fresh()->canAssignTo($member));
+
+        // And they can actually sign in with the documented credentials.
+        $this->post('/login', [
+            'email' => 'zayarwin@gmail.com',
+            'password' => config('lifeos.invite_password'),
+        ]);
+        $this->assertAuthenticatedAs($member);
+    }
+
+    public function test_team_add_repairs_a_half_finished_invitation(): void
+    {
+        // Exactly the broken state: accepted by hand, but nobody behind it.
+        $this->owner->teamMembers()->create([
+            'email' => 'zayarwin@gmail.com',
+            'status' => 'accepted',
+            'token' => TeamMember::newToken(),
+            'accepted_at' => now(),
+        ]);
+
+        $this->artisan('team:add', [
+            'owner' => $this->owner->email,
+            'member' => 'zayarwin@gmail.com',
+        ])->assertSuccessful();
+
+        $this->assertSame(1, TeamMember::count());
+        $this->assertNotNull(TeamMember::first()->member_id);
+    }
+
     // --- notifications ---------------------------------------------------
 
     public function test_assigning_alerts_the_teammate_on_telegram_and_push(): void

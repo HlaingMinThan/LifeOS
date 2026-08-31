@@ -8,8 +8,6 @@ use App\Services\Team\TeamService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -77,17 +75,7 @@ class TeamInvitationController extends Controller
     private function createAccountAndAccept(TeamMember $invitation): RedirectResponse
     {
         $password = (string) config('lifeos.invite_password');
-
-        $user = User::create([
-            'name' => $this->nameFromEmail($invitation->email),
-            'email' => $invitation->email,
-            'password' => Hash::make($password),
-        ]);
-
-        $user->forceFill([
-            'username' => $this->uniqueUsername($user->name, $invitation->email),
-            'email_verified_at' => now(),
-        ])->save();
+        $user = $this->team->createAccountFor($invitation->email);
 
         $this->team->accept($invitation->token, $user);
 
@@ -102,35 +90,6 @@ class TeamInvitationController extends Controller
         // and password are the first things they can put right. Later sign-ins
         // go to the Life OS home like everyone else.
         return redirect()->route('profile.edit');
-    }
-
-    /** "zayar.win@example.com" → "Zayar Win", so the greeting is not an address. */
-    private function nameFromEmail(string $email): string
-    {
-        $local = Str::before($email, '@');
-
-        return Str::of($local)->replaceMatches('/[._-]+/', ' ')->trim()->title()->value()
-            ?: $local;
-    }
-
-    private function uniqueUsername(string $name, string $email): string
-    {
-        $base = Str::of($name)->lower()->replaceMatches('/[^a-z0-9]/', '')->value();
-
-        if ($base === '') {
-            $base = Str::of($email)->before('@')->lower()
-                ->replaceMatches('/[^a-z0-9]/', '')->value();
-        }
-
-        $base = $base !== '' ? $base : 'user';
-        $handle = $base;
-        $suffix = 2;
-
-        while (User::where('username', $handle)->exists()) {
-            $handle = $base.$suffix++;
-        }
-
-        return $handle;
     }
 
     private function invalidPage(string $token): Response
