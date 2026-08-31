@@ -74,6 +74,18 @@ class LedgerEntry extends Model
         );
     }
 
+    /**
+     * Entries carrying one category label. "Uncategorized" is a display name
+     * for the absence of one, so it has to resolve to NULL rather than to a
+     * row that literally stores that word (nothing ever writes it).
+     */
+    public function scopeInCategory(Builder $query, string $name): Builder
+    {
+        return $name === self::UNCATEGORIZED
+            ? $query->whereNull('category')
+            : $query->where('category', $name);
+    }
+
     /** $ym is "2026-08". */
     public function scopeForMonth(Builder $query, string $ym): Builder
     {

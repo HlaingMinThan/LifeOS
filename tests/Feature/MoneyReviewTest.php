@@ -165,6 +165,137 @@ class MoneyReviewTest extends TestCase
         $this->assertSame(2, $categories[1]['count']);
     }
 
+    public function test_other_carries_its_members_so_they_stay_reachable(): void
+    {
+        $this->settled('payable', 970_000, '2026-08-05', 'Rent');
+        $this->settled('payable', 10_000, '2026-08-06', 'Snacks');
+        $this->settled('payable', 20_000, '2026-08-07', 'Stamps');
+
+        $other = $this->review()->monthSummary($this->user, '2026-08')['categories'][1];
+
+        $this->assertSame('Other', $other['category']);
+        $this->assertSame(['Stamps', 'Snacks'], array_column($other['members'], 'category'));
+        $this->assertSame([], $this->review()->monthSummary($this->user, '2026-08')['categories'][0]['members']);
+    }
+
+    // --- Category detail -------------------------------------------------
+
+    public function test_category_detail_lists_transactions_biggest_first(): void
+    {
+        $this->settled('payable', 50_000, '2026-08-05', 'Food & Drinks');
+        $this->settled('payable', 200_000, '2026-08-06', 'Food & Drinks');
+        $this->settled('payable', 120_000, '2026-08-07', 'Food & Drinks');
+        $this->settled('payable', 900_000, '2026-08-08', 'Rent');
+
+        $detail = $this->review()->categoryDetail($this->user, 'Food & Drinks', '2026-08');
+
+        $this->assertSame(370_000, $detail['total']);
+        $this->assertSame(3, $detail['count']);
+        $this->assertSame(123_333, $detail['average']);
+        $this->assertSame(200_000, $detail['biggest']);
+        $this->assertSame([200_000, 120_000, 50_000], array_column($detail['entries'], 'amount_mmk'));
+        // Share is of the whole month's spending, matching the breakdown row.
+        $this->assertSame(29, $detail['share']);
+    }
+
+    public function test_category_detail_excludes_other_categories_and_income(): void
+    {
+        $this->settled('payable', 100_000, '2026-08-05', 'Food & Drinks');
+        $this->settled('payable', 900_000, '2026-08-06', 'Rent');
+        $this->settled('receivable', 500_000, '2026-08-07', 'Food & Drinks');
+
+        $detail = $this->review()->categoryDetail($this->user, 'Food & Drinks', '2026-08');
+
+        $this->assertSame(1, $detail['count']);
+        $this->assertSame(100_000, $detail['total']);
+    }
+
+    /** The label is a display name for NULL, so it has to resolve to those rows. */
+    public function test_uncategorized_detail_finds_entries_with_no_label(): void
+    {
+        $this->settled('payable', 70_000, '2026-08-05', null);
+        $this->settled('payable', 30_000, '2026-08-06', 'Rent');
+
+        $detail = $this->review()->categoryDetail($this->user, LedgerEntry::UNCATEGORIZED, '2026-08');
+
+        $this->assertSame(1, $detail['count']);
+        $this->assertSame(70_000, $detail['total']);
+    }
+
+    public function test_category_detail_compares_against_last_month(): void
+    {
+        $this->settled('payable', 100_000, '2026-07-10', 'Transport');
+        $this->settled('payable', 250_000, '2026-08-10', 'Transport');
+
+        $detail = $this->review()->categoryDetail($this->user, 'Transport', '2026-08');
+
+        $this->assertSame(100_000, $detail['previous']['total']);
+        $this->assertSame(150, $detail['change']);
+    }
+
+    public function test_category_trend_covers_six_months_oldest_first(): void
+    {
+        $this->settled('payable', 40_000, '2026-06-10', 'Transport');
+        $this->settled('payable', 90_000, '2026-08-10', 'Transport');
+        // Outside the six-month window.
+        $this->settled('payable', 999_000, '2026-01-10', 'Transport');
+
+        $trend = $this->review()->categoryDetail($this->user, 'Transport', '2026-08')['trend'];
+
+        $this->assertCount(6, $trend);
+        $this->assertSame('2026-03', $trend[0]['month']);
+        $this->assertSame('2026-08', $trend[5]['month']);
+        $this->assertSame(0, $trend[0]['total']);
+        $this->assertSame(40_000, $trend[3]['total']);
+        $this->assertSame(90_000, $trend[5]['total']);
+    }
+
+    public function test_empty_category_detail_does_not_divide_by_zero(): void
+    {
+        $detail = $this->review()->categoryDetail($this->user, 'Rent', '2026-08');
+
+        $this->assertSame(0, $detail['total']);
+        $this->assertSame(0, $detail['count']);
+        $this->assertSame(0, $detail['average']);
+        $this->assertSame(0, $detail['share']);
+        $this->assertNull($detail['change']);
+    }
+
+    public function test_category_page_renders(): void
+    {
+        $this->settled('payable', 100_000, now()->toDateString(), 'Food & Drinks');
+
+        $this->actingAs($this->user)
+            ->get('/money/category?name='.urlencode('Food & Drinks'))
+            ->assertInertia(fn ($page) => $page
+                ->component('os/MoneyCategory')
+                ->where('detail.category', 'Food & Drinks')
+                ->has('detail.entries', 1)
+                ->has('detail.trend', 6));
+    }
+
+    public function test_category_page_needs_a_name(): void
+    {
+        $this->actingAs($this->user)->get('/money/category')->assertNotFound();
+    }
+
+    public function test_category_page_shows_nothing_of_another_users_spending(): void
+    {
+        $other = User::factory()->create();
+        LedgerEntry::factory()->for($other)->create([
+            'direction' => 'payable', 'amount_mmk' => 999_000, 'category' => 'Rent',
+            'status' => 'paid', 'paid_at' => now(),
+        ]);
+
+        $this->actingAs($this->user)->get('/money/category?name=Rent')
+            ->assertInertia(fn ($page) => $page->where('detail.total', 0)->has('detail.entries', 0));
+    }
+
+    public function test_category_page_requires_login(): void
+    {
+        $this->get('/money/category?name=Rent')->assertRedirect('/login');
+    }
+
     // --- Outstanding -----------------------------------------------------
 
     public function test_outstanding_buckets_open_entries_by_lateness(): void

@@ -25,6 +25,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/money', [LedgerController::class, 'index'])->name('money');
     // Before /money/day/{date} would happily swallow "review" as a date.
     Route::get('/money/review', [ReviewController::class, 'index'])->name('money.review');
+    // ?name= rather than a path segment: category labels carry spaces and "&".
+    Route::get('/money/category', [ReviewController::class, 'category'])->name('money.category');
     Route::post('/money/categories/rename', [ReviewController::class, 'rename'])->name('money.categories.rename');
     Route::get('/money/day/{date}', [LedgerController::class, 'day'])->name('money.day');
     Route::post('/ledger/parse-screenshot', [LedgerController::class, 'parseScreenshot'])->name('ledger.parse-screenshot');

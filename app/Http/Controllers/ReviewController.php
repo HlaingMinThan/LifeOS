@@ -34,6 +34,22 @@ class ReviewController extends Controller
         ]);
     }
 
+    /** One category opened up: the transactions behind the total. */
+    public function category(Request $request): Response
+    {
+        $name = trim((string) $request->query('name'));
+
+        abort_if($name === '', 404);
+
+        $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->query('month'))
+            ? $request->query('month')
+            : Date::now()->format('Y-m');
+
+        return Inertia::render('os/MoneyCategory', [
+            'detail' => $this->review->categoryDetail($request->user(), $name, $month),
+        ]);
+    }
+
     /**
      * Rename a category across every entry that carries it. Categories are
      * strings on entries, not rows in a table, so the rename IS the update.

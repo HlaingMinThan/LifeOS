@@ -4,7 +4,15 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, TrendingDown, TrendingUp 
 import { computed, ref } from 'vue';
 import { formatMmk } from '@/lib/format';
 
-type Category = { category: string; count: number; total: number; share?: number };
+type CategoryMember = { category: string; count: number; total: number };
+type Category = {
+    category: string;
+    count: number;
+    total: number;
+    share?: number;
+    // Populated only on the synthetic "Other" row.
+    members?: CategoryMember[];
+};
 type Period = {
     income: number;
     expenses: number;
@@ -84,6 +92,12 @@ const owedRows = computed(() =>
             .filter((r) => r.count > 0),
     ),
 );
+
+const otherOpen = ref(false);
+const toggleOther = () => (otherOpen.value = !otherOpen.value);
+
+const categoryUrl = (name: string) =>
+    `/money/category?name=${encodeURIComponent(name)}&month=${props.monthly.month}`;
 
 const weekTab = ref<'this' | 'last'>('this');
 const week = computed(() => (weekTab.value === 'this' ? props.thisWeek : props.lastWeek));
@@ -246,16 +260,36 @@ function saveRename() {
 
                 <template v-else>
                     <div class="flex items-baseline justify-between gap-2">
-                        <button
-                            class="flex min-w-0 items-center gap-1.5 text-sm font-medium"
-                            @click="startRename(c.category)"
+                        <!-- "Other" is a display bucket with no entries of its
+                             own, so it expands in place instead of linking. -->
+                        <component
+                            :is="c.members?.length ? 'button' : Link"
+                            v-bind="
+                                c.members?.length
+                                    ? {}
+                                    : { href: categoryUrl(c.category) }
+                            "
+                            class="flex min-w-0 items-center gap-1 text-left text-sm font-medium"
+                            @click="c.members?.length && toggleOther()"
                         >
                             <span class="truncate">{{ c.category }}</span>
-                            <Pencil class="h-3 w-3 shrink-0 text-muted-foreground/50" />
-                        </button>
-                        <span class="shrink-0 text-sm font-bold tabular-nums text-rose-400">
-                            {{ c.total.toLocaleString() }}
-                        </span>
+                            <ChevronRight
+                                class="h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform"
+                                :class="{ 'rotate-90': c.members?.length && otherOpen }"
+                            />
+                        </component>
+                        <div class="flex shrink-0 items-baseline gap-2">
+                            <span class="text-sm font-bold tabular-nums text-rose-400">
+                                {{ c.total.toLocaleString() }}
+                            </span>
+                            <button
+                                v-if="!c.members?.length"
+                                class="p-1 text-muted-foreground/50"
+                                @click.stop.prevent="startRename(c.category)"
+                            >
+                                <Pencil class="h-3 w-3" />
+                            </button>
+                        </div>
                     </div>
                     <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                         <div
@@ -268,6 +302,19 @@ function saveRename() {
                         {{ c.share ?? 0 }}% · {{ c.count }}
                         {{ c.count === 1 ? 'entry' : 'entries' }}
                     </p>
+
+                    <!-- The small categories folded into "Other" -->
+                    <ul v-if="c.members?.length && otherOpen" class="mt-2 space-y-1 border-t border-border pt-2">
+                        <li v-for="m in c.members" :key="m.category">
+                            <Link
+                                :href="categoryUrl(m.category)"
+                                class="flex items-baseline justify-between gap-2 text-xs"
+                            >
+                                <span class="truncate text-muted-foreground">{{ m.category }}</span>
+                                <span class="shrink-0 tabular-nums">{{ m.total.toLocaleString() }}</span>
+                            </Link>
+                        </li>
+                    </ul>
                 </template>
             </li>
         </ul>
@@ -304,13 +351,14 @@ function saveRename() {
             </div>
 
             <ul v-if="week.categories.length" class="mt-3 space-y-1.5">
-                <li
-                    v-for="c in week.categories"
-                    :key="c.category"
-                    class="flex items-baseline justify-between gap-2 text-sm"
-                >
-                    <span class="truncate text-muted-foreground">{{ c.category }}</span>
-                    <span class="shrink-0 tabular-nums">{{ c.total.toLocaleString() }}</span>
+                <li v-for="c in week.categories" :key="c.category">
+                    <Link
+                        :href="categoryUrl(c.category)"
+                        class="flex items-baseline justify-between gap-2 text-sm"
+                    >
+                        <span class="truncate text-muted-foreground">{{ c.category }}</span>
+                        <span class="shrink-0 tabular-nums">{{ c.total.toLocaleString() }}</span>
+                    </Link>
                 </li>
             </ul>
             <p v-else class="mt-2 text-xs text-muted-foreground">Nothing settled this week.</p>

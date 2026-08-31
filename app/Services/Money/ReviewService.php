@@ -5,6 +5,7 @@ namespace App\Services\Money;
 use App\Models\LedgerEntry;
 use App\Models\User;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Date;
 
 /**
@@ -126,6 +127,89 @@ class ReviewService
             .self::HEALTHY_SAVINGS_RATE.'% mark.');
     }
 
+    /**
+     * One category, opened up: the real transactions behind the total.
+     * Sorted biggest-first — the question being asked is "what cost me a lot",
+     * and that answer is at the top of the list, not in date order.
+     */
+    public function categoryDetail(User $user, string $name, string $ym): array
+    {
+        $start = Date::parse($ym.'-01')->startOfMonth();
+        $previous = $start->subMonth();
+
+        $entries = $this->categoryEntries($user, $name, $start, $start->endOfMonth());
+        $total = (int) $entries->sum('amount_mmk');
+        $count = $entries->count();
+
+        $previousTotal = (int) $this->categoryEntries(
+            $user, $name, $previous, $previous->endOfMonth()
+        )->sum('amount_mmk');
+
+        // Share is of the month's whole spend, so the row reads the same here
+        // as it does in the breakdown that linked to it.
+        $monthSpend = (int) $user->ledgerEntries()->payable()
+            ->settledBetween($start->toDateString(), $start->endOfMonth()->toDateString())
+            ->sum('amount_mmk');
+
+        return [
+            'category' => $name,
+            'month' => $ym,
+            'label' => $start->format('F Y'),
+            'total' => $total,
+            'count' => $count,
+            'average' => $count > 0 ? (int) round($total / $count) : 0,
+            'biggest' => (int) $entries->max('amount_mmk'),
+            'share' => $monthSpend > 0 ? (int) round(($total / $monthSpend) * 100) : 0,
+            'previous' => ['total' => $previousTotal, 'label' => $previous->format('F Y')],
+            'change' => $this->percentChange($previousTotal, $total),
+            'trend' => $this->categoryTrend($user, $name, $start),
+            'entries' => $entries->sortByDesc('amount_mmk')->values()->map(fn (LedgerEntry $e) => [
+                'id' => $e->id,
+                'title' => $e->title,
+                'amount_mmk' => $e->amount_mmk,
+                'date' => ($e->paid_at ?? $e->due_date)?->toDateString(),
+                'note' => $e->note,
+                'contact' => $e->contact?->name,
+                'image' => $e->image,
+            ])->all(),
+        ];
+    }
+
+    /** Monthly totals for one category, oldest first — is this growing? */
+    public function categoryTrend(User $user, string $name, CarbonInterface $anchor, int $months = 6): array
+    {
+        $anchor = $anchor->startOfMonth();
+        $first = $anchor->subMonths($months - 1);
+
+        // One query for the whole window; bucketing by month happens in PHP
+        // so the settled-date fallback stays in a single place.
+        $totals = $user->ledgerEntries()->payable()->inCategory($name)
+            ->settledBetween($first->toDateString(), $anchor->endOfMonth()->toDateString())
+            ->get(['amount_mmk', 'paid_at', 'due_date'])
+            ->groupBy(fn (LedgerEntry $e) => ($e->paid_at ?? $e->due_date)->format('Y-m'))
+            ->map(fn ($group) => (int) $group->sum('amount_mmk'));
+
+        return collect(range(0, $months - 1))
+            ->map(function (int $i) use ($first, $totals) {
+                $month = $first->addMonths($i);
+
+                return [
+                    'month' => $month->format('Y-m'),
+                    'label' => $month->format('M'),
+                    'total' => $totals->get($month->format('Y-m'), 0),
+                ];
+            })->all();
+    }
+
+    /** @return Collection<int, LedgerEntry> */
+    private function categoryEntries(User $user, string $name, CarbonInterface $start, CarbonInterface $end)
+    {
+        return $user->ledgerEntries()->payable()->inCategory($name)
+            ->settledBetween($start->toDateString(), $end->toDateString())
+            ->with('contact')
+            ->get();
+    }
+
     /** Income, spending and the category split for any window. */
     public function periodSummary(User $user, CarbonInterface $start, CarbonInterface $end): array
     {
@@ -175,14 +259,22 @@ class ReviewService
             fn ($g) => $share($g['total']) >= self::SMALL_CATEGORY_SHARE
         );
 
-        $rows = $big->map(fn ($g) => $g + ['share' => $share($g['total'])])->all();
+        $rows = $big->map(fn ($g) => $g + ['share' => $share($g['total']), 'members' => []])->all();
 
         if ($small->isNotEmpty()) {
+            // "Other" is a display bucket, not a label anything carries, so it
+            // has no detail page of its own — it names its members instead so
+            // each one stays reachable.
             $rows[] = [
                 'category' => 'Other',
                 'count' => $small->sum('count'),
                 'total' => $small->sum('total'),
                 'share' => $share((int) $small->sum('total')),
+                'members' => $small->map(fn ($g) => [
+                    'category' => $g['category'],
+                    'total' => $g['total'],
+                    'count' => $g['count'],
+                ])->values()->all(),
             ];
         }
 
