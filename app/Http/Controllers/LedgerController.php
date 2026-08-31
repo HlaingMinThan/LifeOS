@@ -79,9 +79,13 @@ class LedgerController extends Controller
 
         $noDate = $openEntries->filter(fn ($e) => ! $e->due_date)->values();
 
-        // Glance line for the review card — always the CURRENT month, even
-        // while browsing an older one, so it reads as "how am I doing now".
-        $thisMonth = $this->review->monthSummary($request->user(), now()->format('Y-m'));
+        // Glance line for the review card. Independent of the calendar month
+        // being browsed — it answers "how am I doing", not "what am I looking
+        // at" — and falls back to the last active month so the 1st of a month
+        // does not blank it out.
+        $thisMonth = $this->review->monthSummary(
+            $request->user(), $this->review->latestActiveMonth($request->user()),
+        );
 
         return Inertia::render('os/Money', [
             'month' => $start->format('Y-m'),
@@ -93,6 +97,8 @@ class LedgerController extends Controller
             'review' => [
                 'savings_rate' => $thisMonth['savings_rate'],
                 'expenses' => $thisMonth['expenses'],
+                'month' => $thisMonth['month'],
+                'month_label' => $thisMonth['label'],
                 'top_category' => $thisMonth['categories'][0]['category'] ?? null,
                 'indicator' => $this->review->indicator(
                     $thisMonth, $this->review->outstanding($request->user()),

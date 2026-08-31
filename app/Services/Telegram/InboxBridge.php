@@ -283,7 +283,7 @@ class InboxBridge
     /** /review — the money health check as text. */
     private function moneyReview(User $user): string
     {
-        $month = $this->review->monthSummary($user, now()->format('Y-m'));
+        $month = $this->review->monthSummary($user, $this->review->latestActiveMonth($user));
         $outstanding = $this->review->outstanding($user);
         $indicator = $this->review->indicator($month, $outstanding);
         $week = $this->review->weekSummary($user);

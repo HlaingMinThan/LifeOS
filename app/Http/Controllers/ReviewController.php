@@ -20,7 +20,7 @@ class ReviewController extends Controller
 
         $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->query('month'))
             ? $request->query('month')
-            : Date::now()->format('Y-m');
+            : $this->review->latestActiveMonth($user);
 
         $monthly = $this->review->monthSummary($user, $month);
         $outstanding = $this->review->outstanding($user);

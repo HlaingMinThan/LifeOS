@@ -382,6 +382,71 @@ class MoneyReviewTest extends TestCase
         $this->assertSame('none', $indicator['level']);
     }
 
+    // --- Which month the review opens on ---------------------------------
+
+    public function test_review_opens_on_the_current_month_when_it_has_activity(): void
+    {
+        $this->settled('payable', 10_000, now()->toDateString());
+
+        $this->assertSame(
+            now()->format('Y-m'),
+            $this->review()->latestActiveMonth($this->user),
+        );
+    }
+
+    /** On the 1st of a month, an empty screen reads as a broken page. */
+    public function test_review_falls_back_to_the_last_month_with_activity(): void
+    {
+        $this->settled('payable', 10_000, now()->subMonths(2)->toDateString());
+        $this->settled('payable', 20_000, now()->subMonth()->toDateString());
+
+        $this->assertSame(
+            now()->subMonth()->format('Y-m'),
+            $this->review()->latestActiveMonth($this->user),
+        );
+    }
+
+    public function test_review_opens_on_the_current_month_with_no_data_at_all(): void
+    {
+        $this->assertSame(
+            now()->format('Y-m'),
+            $this->review()->latestActiveMonth($this->user),
+        );
+    }
+
+    /** Open entries are not activity — nothing has actually moved. */
+    public function test_open_entries_do_not_count_as_an_active_month(): void
+    {
+        LedgerEntry::factory()->for($this->user)->create([
+            'direction' => 'payable', 'amount_mmk' => 10_000,
+            'status' => 'open', 'due_date' => now(),
+        ]);
+        $this->settled('payable', 20_000, now()->subMonth()->toDateString());
+
+        $this->assertSame(
+            now()->subMonth()->format('Y-m'),
+            $this->review()->latestActiveMonth($this->user),
+        );
+    }
+
+    public function test_review_page_defaults_to_the_last_active_month(): void
+    {
+        $this->settled('payable', 20_000, now()->subMonth()->toDateString(), 'Rent');
+
+        $this->actingAs($this->user)->get('/money/review')
+            ->assertInertia(fn ($page) => $page
+                ->where('monthly.month', now()->subMonth()->format('Y-m'))
+                ->has('monthly.categories', 1));
+    }
+
+    public function test_an_explicit_month_still_wins_over_the_fallback(): void
+    {
+        $this->settled('payable', 20_000, now()->subMonth()->toDateString());
+
+        $this->actingAs($this->user)->get('/money/review?month=2026-03')
+            ->assertInertia(fn ($page) => $page->where('monthly.month', '2026-03'));
+    }
+
     // --- Pages -----------------------------------------------------------
 
     public function test_review_page_renders_every_section(): void

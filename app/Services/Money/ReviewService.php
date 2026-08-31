@@ -23,6 +23,33 @@ class ReviewService
     /** Categories below this share of spending collapse into "Other". */
     private const SMALL_CATEGORY_SHARE = 3;
 
+    /**
+     * The month the review should open on: the current one, or — before any
+     * money has moved in it — the most recent one that has something to show.
+     * On the 1st of a month an empty screen is not a useful answer to
+     * "how am I doing", and it reads as a broken page rather than a new month.
+     */
+    public function latestActiveMonth(User $user): string
+    {
+        $now = Date::now();
+
+        $settledThisMonth = $user->ledgerEntries()
+            ->settledBetween(
+                $now->startOfMonth()->toDateString(),
+                $now->endOfMonth()->toDateString(),
+            )->exists();
+
+        if ($settledThisMonth) {
+            return $now->format('Y-m');
+        }
+
+        $latest = $user->ledgerEntries()->paid()
+            ->selectRaw('max(date(coalesce(paid_at, due_date))) as settled_on')
+            ->value('settled_on');
+
+        return $latest ? Date::parse($latest)->format('Y-m') : $now->format('Y-m');
+    }
+
     /** $ym is "2026-08". */
     public function monthSummary(User $user, string $ym): array
     {

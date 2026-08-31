@@ -30,6 +30,8 @@ const props = defineProps<{
     review: {
         savings_rate: number | null;
         expenses: number;
+        month: string;
+        month_label: string;
         top_category: string | null;
         indicator: { level: string; emoji: string; message: string };
     };
@@ -369,7 +371,7 @@ const groups = computed(() =>
 
     <!-- Review glance: this month's health, always current month -->
     <Link
-        href="/money/review"
+        :href="`/money/review?month=${review.month}`"
         class="mt-4 flex items-center gap-3 rounded-xl border p-3"
         :class="REVIEW_RING[review.indicator.level]"
     >
@@ -380,7 +382,7 @@ const groups = computed(() =>
                 <span class="font-bold">{{
                     review.savings_rate === null ? '—' : review.savings_rate + '%'
                 }}</span>
-                this month
+                in {{ review.month_label }}
                 <span v-if="review.top_category" class="text-muted-foreground">
                     · most on {{ review.top_category }}
                 </span>
