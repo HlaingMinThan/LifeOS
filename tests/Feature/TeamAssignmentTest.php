@@ -7,12 +7,15 @@ use App\Models\LedgerEntry;
 use App\Models\TeamMember;
 use App\Models\Todo;
 use App\Models\User;
+use App\Notifications\BotPush;
 use App\Services\Team\MentionResolver;
 use App\Services\Team\TeamService;
 use App\Services\Telegram\InboxBridge;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class TeamAssignmentTest extends TestCase
@@ -222,6 +225,57 @@ class TeamAssignmentTest extends TestCase
 
         $this->assertGuest();
         $this->assertSame('pending', TeamMember::first()->status);
+    }
+
+    // --- notifications ---------------------------------------------------
+
+    public function test_assigning_alerts_the_teammate_on_telegram_and_push(): void
+    {
+        Notification::fake();
+        Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+        $this->member->forceFill(['telegram_bot_token' => 'tok', 'telegram_chat_id' => '55'])->save();
+        $this->joinTeam();
+
+        $this->actingAs($this->owner)->postJson('/inbox/apply', [
+            'raw_text' => '@zayarwin send the deck',
+            'parsed' => ['action' => 'add_todo', 'target' => 'send the deck'],
+            'assignee_id' => $this->member->id,
+        ])->assertOk();
+
+        Http::assertSent(fn ($r) => str_contains($r['text'] ?? '', 'New task from Boss'));
+        Notification::assertSentTo($this->member, BotPush::class);
+    }
+
+    public function test_completing_alerts_the_assigner_on_telegram_and_push(): void
+    {
+        Notification::fake();
+        Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+        $this->owner->forceFill(['telegram_bot_token' => 'tok', 'telegram_chat_id' => '77'])->save();
+        $this->joinTeam();
+
+        $todo = $this->member->todos()->create(['title' => 'send the deck']);
+        $todo->assignedBy()->associate($this->owner)->save();
+
+        // The teammate ticks it off in their own list.
+        $this->actingAs($this->member)->patch("/todos/{$todo->id}/toggle")->assertRedirect();
+
+        Http::assertSent(fn ($r) => str_contains($r['text'] ?? '', 'Zayar Win completed'));
+        Notification::assertSentTo($this->owner, BotPush::class);
+    }
+
+    public function test_push_still_arrives_when_the_assigner_has_no_bot(): void
+    {
+        Notification::fake();
+        Http::fake();
+        $this->joinTeam(); // owner has no telegram configured
+
+        $todo = $this->member->todos()->create(['title' => 'send the deck']);
+        $todo->assignedBy()->associate($this->owner)->save();
+
+        $this->actingAs($this->member)->patch("/todos/{$todo->id}/toggle")->assertRedirect();
+
+        Notification::assertSentTo($this->owner, BotPush::class);
+        Http::assertNothingSent();
     }
 
     // --- the week view ---------------------------------------------------

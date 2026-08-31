@@ -4,6 +4,7 @@ namespace App\Services\Team;
 
 use App\Models\Todo;
 use App\Models\User;
+use App\Notifications\BotPush;
 use App\Services\Telegram\TelegramClient;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -45,7 +46,8 @@ class TaskAssigner
 
         $this->notify(
             $assignee,
-            "📥 New task from {$owner->name}\n{$todo->title}".$this->when($todo),
+            "📥 New task from {$owner->name}",
+            $todo->title.$this->when($todo),
         );
 
         return $todo;
@@ -60,7 +62,8 @@ class TaskAssigner
 
         $this->notify(
             $todo->assignedBy,
-            "✅ {$todo->user->name} completed: {$todo->title}",
+            "✅ {$todo->user->name} completed a task",
+            $todo->title,
         );
     }
 
@@ -70,22 +73,33 @@ class TaskAssigner
             return '';
         }
 
-        $line = "\n📅 ".$todo->due_date->format('D j M');
+        $line = ' · 📅 '.$todo->due_date->format('D j M');
 
         return $todo->due_time
             ? $line.' ⏰ '.strtolower(date('g:ia', strtotime($todo->due_time)))
             : $line;
     }
 
-    /** Best-effort: a silent bot must never fail the assignment itself. */
-    private function notify(User $user, string $message): void
+    /**
+     * Telegram *and* a PWA push, so the alert lands even for someone who never
+     * connected a bot. Both are best-effort and independent: neither a silent
+     * bot nor a stale push subscription may fail the write that triggered it,
+     * and one failing must not suppress the other.
+     */
+    private function notify(User $user, string $title, ?string $body = null): void
     {
-        if (! $user->hasTelegram()) {
-            return;
+        if ($user->hasTelegram()) {
+            try {
+                $this->telegram->forUser($user)->send(
+                    $body === null ? $title : "{$title}\n{$body}",
+                );
+            } catch (Throwable $e) {
+                report($e);
+            }
         }
 
         try {
-            $this->telegram->forUser($user)->send($message);
+            $user->notify(new BotPush($title, $body));
         } catch (Throwable $e) {
             report($e);
         }
