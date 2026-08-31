@@ -54,6 +54,17 @@ class TodoController extends Controller
         ]);
     }
 
+    /** The week ahead for me and the work I handed to teammates. */
+    public function week(Request $request): Response
+    {
+        $todos = Todo::weekAhead($request->user())->get();
+
+        return Inertia::render('os/TodoWeek', [
+            'todos' => $todos,
+            'days' => collect(range(0, 6))->map(fn (int $i) => today()->addDays($i)->toDateString()),
+        ]);
+    }
+
     /** Full detail page with the rich-text description editor. */
     public function show(Request $request, int $todo): Response
     {

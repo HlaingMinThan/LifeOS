@@ -33,6 +33,12 @@ type Todo = {
     due_time: string | null;
 };
 type CareTask = { id: number; title: string };
+type WeekTodo = Todo & {
+    user_id: number;
+    assigned_by_id: number | null;
+    user?: { id: number; name: string } | null;
+    assigned_by?: { id: number; name: string } | null;
+};
 type Assignee = { id: number; name: string; username: string | null };
 type Parsed = {
     action: string;
@@ -45,6 +51,8 @@ type Parsed = {
 };
 
 const props = defineProps<{
+    weekTodos: WeekTodo[];
+    weekCount: number;
     teammates: Assignee[];
     focus: Todo | null;
     nextUp: Todo | null;
@@ -98,6 +106,22 @@ const clearFocus = () => {
 };
 const setFocus = (t: Todo) =>
     router.patch(`/todos/${t.id}/focus`, {}, { preserveScroll: true });
+
+/** Name to show on a week row: the teammate it went to, or who sent it to me. */
+function weekOwner(t: WeekTodo): string | null {
+    if (t.assigned_by_id && t.user && t.assigned_by_id !== t.user_id) {
+        return t.user.name;
+    }
+    return t.assigned_by ? `from ${t.assigned_by.name}` : null;
+}
+
+function weekDayLabel(t: WeekTodo): string {
+    if (!t.due_date) return '';
+    const date = t.due_date.slice(0, 10);
+    if (date === todayIso) return 'Today';
+    if (date === tomorrowIso) return 'Tmr';
+    return new Date(date).toLocaleDateString('en-GB', { weekday: 'short' });
+}
 
 const dismissPrompt = () =>
     router.patch(dismissTelegram().url, {}, { preserveScroll: true });
@@ -700,6 +724,42 @@ function dismiss() {
                 </ul>
             </section>
         </Link>
+
+        <!-- 📆 This week: mine plus what I handed to the team -->
+        <section v-if="weekTodos.length" class="rounded-xl border border-border bg-card p-4">
+            <h2 class="flex items-center justify-between text-sm font-medium text-muted-foreground">
+                📆 This week
+                <Link href="/todos/week" class="text-xs text-primary">
+                    view all {{ weekCount }} →
+                </Link>
+            </h2>
+            <ul class="mt-2 divide-y divide-border">
+                <li
+                    v-for="t in weekTodos"
+                    :key="t.id"
+                    class="flex items-center gap-2 py-2 text-sm"
+                >
+                    <button
+                        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground"
+                        @click="toggleTodo(t)"
+                    >
+                        <Check class="h-3.5 w-3.5" />
+                    </button>
+                    <Link :href="`/todos/${t.id}`" class="min-w-0 flex-1">
+                        <span class="block truncate">{{ t.title }}</span>
+                        <span
+                            v-if="weekOwner(t)"
+                            class="text-xs font-medium text-blue-600 dark:text-blue-400"
+                        >
+                            {{ weekOwner(t) }}
+                        </span>
+                    </Link>
+                    <span class="shrink-0 text-xs text-muted-foreground">
+                        {{ weekDayLabel(t) }}
+                    </span>
+                </li>
+            </ul>
+        </section>
 
         <!-- 💵 Money strip -->
         <Link href="/money" class="block">

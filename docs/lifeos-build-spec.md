@@ -452,6 +452,15 @@ login *or* registration, landing them back on it.
 
 Revoking ends the relationship only — the member keeps every task in their own list.
 
+### The week view
+
+Home carries a **This week** card — the next five open todos due in the next seven
+days — and `/todos/week` shows the whole week grouped by day. Both span *me and my
+team*: my own list plus the tasks I assigned out, which is exactly the set I am
+allowed to see. Rows name the teammate a task went to, or who sent it to me.
+`Todo::weekAhead($user)` is the one query behind both, so the card and the page can
+never disagree.
+
 ### Landmines
 
 - **`actingAs` persists across requests in a test.** A "guest visits the invite" test

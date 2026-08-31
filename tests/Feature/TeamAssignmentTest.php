@@ -224,6 +224,49 @@ class TeamAssignmentTest extends TestCase
         $this->assertSame('pending', TeamMember::first()->status);
     }
 
+    // --- the week view ---------------------------------------------------
+
+    public function test_week_view_covers_my_todos_and_the_ones_i_assigned(): void
+    {
+        $this->joinTeam();
+
+        $mine = $this->owner->todos()->create([
+            'title' => 'my own task', 'due_date' => today()->addDay(),
+        ]);
+        $theirs = $this->member->todos()->create([
+            'title' => 'their assigned task', 'due_date' => today()->addDays(2),
+        ]);
+        $theirs->assignedBy()->associate($this->owner)->save();
+
+        // Their private task and anything beyond the week stay out.
+        $this->member->todos()->create(['title' => 'their private task', 'due_date' => today()]);
+        $this->owner->todos()->create(['title' => 'next month', 'due_date' => today()->addDays(20)]);
+
+        $this->actingAs($this->owner)->get('/todos/week')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('os/TodoWeek')
+                ->has('todos', 2)
+                ->where('todos.0.title', 'my own task')
+                ->where('todos.1.title', 'their assigned task'));
+    }
+
+    public function test_home_shows_five_of_the_week_with_the_true_total(): void
+    {
+        $this->joinTeam();
+
+        foreach (range(1, 7) as $i) {
+            $this->owner->todos()->create([
+                'title' => "task {$i}", 'due_date' => today()->addDays($i % 6),
+            ]);
+        }
+
+        $this->actingAs($this->owner)->get('/')
+            ->assertInertia(fn ($page) => $page
+                ->has('weekTodos', 5)
+                ->where('weekCount', 7));
+    }
+
     // --- the privacy boundary -------------------------------------------
 
     public function test_owner_sees_only_the_todos_they_assigned(): void

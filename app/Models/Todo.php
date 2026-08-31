@@ -46,6 +46,27 @@ class Todo extends Model
         return $this->assigned_by_id !== null;
     }
 
+    /**
+     * Open todos due in the next seven days, across everyone this user can
+     * see: their own list plus the tasks they assigned to teammates. Ordered
+     * the way a week reads — soonest first, timed before untimed.
+     */
+    public static function weekAhead(User $user): Builder
+    {
+        return static::query()
+            ->with(['user:id,name,username', 'assignedBy:id,name,username'])
+            ->open()
+            ->where(fn (Builder $q) => $q->where('user_id', $user->id)
+                ->orWhere('assigned_by_id', $user->id))
+            ->whereBetween('due_date', [
+                today()->toDateString(),
+                today()->addDays(6)->toDateString(),
+            ])
+            ->orderBy('due_date')
+            ->orderByRaw('due_time is null')
+            ->orderBy('due_time');
+    }
+
     /** Open, has a time, not yet reminded, and that moment has passed. */
     public function scopeDueForReminder(Builder $query): Builder
     {
