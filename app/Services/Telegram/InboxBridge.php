@@ -8,6 +8,8 @@ use App\Services\Inbox\BrainDumpParser;
 use App\Services\Inbox\ClaudeParser;
 use App\Services\Inbox\InboxApplier;
 use App\Services\Inbox\ParserContract;
+use App\Services\Team\MentionResolver;
+use App\Services\Team\TaskAssigner;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
@@ -39,6 +41,8 @@ class InboxBridge
         private InboxApplier $applier,
         private DigestBuilder $digest,
         private TelegramClient $telegram,
+        private MentionResolver $mentions,
+        private TaskAssigner $assigner,
     ) {}
 
     /**
@@ -218,6 +222,17 @@ class InboxBridge
 
     private function applyText(string $text, User $user): string
     {
+        // "@zayarwin send the deck by monday" assigns instead of adding to my
+        // own list. Resolved before parsing so the handle never reaches Claude.
+        $mention = $this->mentions->resolve($text, $user);
+        if ($mention['handle']) {
+            if (! $mention['assignee']) {
+                return "🤔 No teammate matches @{$mention['handle']}.\nInvite them in Settings → Team.";
+            }
+
+            return $this->assignText($mention['text'], $user, $mention['assignee']);
+        }
+
         try {
             $parsed = $this->parser->parse($text, $user);
         } catch (Throwable $e) {
@@ -253,6 +268,41 @@ class InboxBridge
             $parsed['target'].$amount,
             $when !== '' ? $when : null,
             'Wrong? /undo',
+        ]));
+    }
+
+    /** Hand a parsed task to a teammate's own list. */
+    private function assignText(string $text, User $owner, User $assignee): string
+    {
+        try {
+            $parsed = $this->parser->parse($text, $owner);
+        } catch (Throwable $e) {
+            report($e);
+
+            return '⚠️ Parser unavailable — try again in a moment.';
+        }
+
+        // Only work can be handed over; money and care belong to one person.
+        if (! in_array($parsed['action'], ['add_todo', 'complete_todo', 'unknown'], true)) {
+            return "🤔 You can only assign todos to a teammate.\nSay it like: @{$assignee->username} send the report on Monday 12pm";
+        }
+
+        $parsed['target'] = $parsed['target'] ?: $text;
+        $parsed['bucket'] ??= 'work';
+
+        try {
+            $todo = $this->assigner->assign($owner, $assignee, $parsed);
+        } catch (ValidationException $e) {
+            return '⚠️ '.collect($e->errors())->flatten()->first();
+        }
+
+        $time = $todo->due_time ? ' ⏰ '.$this->fmtTime($todo->due_time) : '';
+        $when = $todo->due_date ? '📅 '.$todo->due_date->format('D j M').$time : '';
+
+        return implode("\n", array_filter([
+            "📤 Assigned to {$assignee->name}",
+            $todo->title,
+            $when !== '' ? $when : null,
         ]));
     }
 

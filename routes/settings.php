@@ -3,12 +3,24 @@
 use App\Http\Controllers\Settings\NotificationController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
+use App\Http\Controllers\Settings\TeamController;
 use App\Http\Controllers\Settings\TelegramController;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', '/settings/profile');
+
+    // Team: invite by email, then assign work with @username.
+    Route::get('settings/team', [TeamController::class, 'index'])->name('team.index');
+    Route::post('settings/team', [TeamController::class, 'store'])
+        ->middleware('throttle:10,1')->name('team.store');
+    Route::get('settings/team/{member}', [TeamController::class, 'show'])
+        ->whereNumber('member')->name('team.show');
+    Route::post('settings/team/{member}/resend', [TeamController::class, 'resend'])
+        ->whereNumber('member')->middleware('throttle:10,1')->name('team.resend');
+    Route::delete('settings/team/{member}', [TeamController::class, 'destroy'])
+        ->whereNumber('member')->name('team.destroy');
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');

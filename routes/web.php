@@ -7,6 +7,7 @@ use App\Http\Controllers\InboxController;
 use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\OnboardController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TodoController;
 use Illuminate\Support\Facades\Route;
@@ -16,6 +17,11 @@ use Illuminate\Support\Facades\Route;
 // secret_token header authenticates the request (see the controller).
 Route::post('/telegram/webhook/{secret}', TelegramWebhookController::class)
     ->name('telegram.webhook');
+
+// Invite links are public so a guest can land, register, then accept.
+Route::get('/invite/{token}', [TeamInvitationController::class, 'show'])->name('team.invitation.show');
+Route::post('/invite/{token}', [TeamInvitationController::class, 'accept'])
+    ->middleware('auth')->name('team.invitation.accept');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/', [HomeController::class, 'index'])->name('home');
@@ -30,8 +36,9 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/ledger/{entry}', [LedgerController::class, 'destroy'])->name('ledger.destroy');
 
     Route::get('/todos', [TodoController::class, 'index'])->name('todos');
-    Route::get('/todos/{todo}', [TodoController::class, 'show'])->whereNumber('todo')->name('todos.show');
+    Route::get('/todos/week', [TodoController::class, 'week'])->name('todos.week');
     Route::get('/todos/day/{date}', [TodoController::class, 'day'])->name('todos.day');
+    Route::get('/todos/{todo}', [TodoController::class, 'show'])->whereNumber('todo')->name('todos.show');
     Route::post('/todos', [TodoController::class, 'store'])->name('todos.store');
     Route::patch('/todos/{todo}/toggle', [TodoController::class, 'toggle'])->name('todos.toggle');
     Route::patch('/todos/{todo}/focus', [TodoController::class, 'focus'])->name('todos.focus');

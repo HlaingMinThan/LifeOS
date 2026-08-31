@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Todo;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,7 +18,21 @@ class HomeController extends Controller
 
         $ideas = $user->ideas()->where('status', 'parked')->orderBy('id')->get();
 
+        // This week across the whole team — my own todos plus the ones I handed
+        // out, which is all of anyone else's I am allowed to see.
+        $week = Todo::weekAhead($user);
+
         return Inertia::render('os/Home', [
+            'weekTodos' => (clone $week)->take(5)->get(),
+            'weekCount' => (clone $week)->count(),
+            // Powers the @ autocomplete in the magic box — handles are hard to
+            // type exactly on a phone.
+            'teammates' => $user->teammates()
+                ->map(fn ($mate) => [
+                    'id' => $mate->id,
+                    'name' => $mate->name,
+                    'username' => $mate->username,
+                ])->values(),
             'focus' => $user->todos()->open()->where('focused', true)->first(),
             // The single next thing to do: soonest today-or-later (or undated)
             // open todo, timed before untimed, excluding the focused one.

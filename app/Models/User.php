@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -124,5 +125,35 @@ class User extends Authenticatable implements PasskeyUser
     public function parserExamples(): HasMany
     {
         return $this->hasMany(ParserExample::class);
+    }
+
+    /** People I invited into my team (any status). */
+    public function teamMembers(): HasMany
+    {
+        return $this->hasMany(TeamMember::class, 'owner_id');
+    }
+
+    /** Teams I belong to — i.e. who may assign work to me. */
+    public function teamMemberships(): HasMany
+    {
+        return $this->hasMany(TeamMember::class, 'member_id');
+    }
+
+    /** Todos I handed to teammates — the only ones I may see of theirs. */
+    public function assignedTodos(): HasMany
+    {
+        return $this->hasMany(Todo::class, 'assigned_by_id');
+    }
+
+    /** Accepted members of my team, resolved to accounts. */
+    public function teammates(): Collection
+    {
+        return $this->teamMembers()->accepted()->with('member')->get()
+            ->pluck('member')->filter()->values();
+    }
+
+    public function canAssignTo(User $other): bool
+    {
+        return $this->teamMembers()->accepted()->where('member_id', $other->id)->exists();
     }
 }

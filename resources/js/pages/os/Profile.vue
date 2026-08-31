@@ -9,6 +9,7 @@ import {
     Send,
     ShieldCheck,
     UserPen,
+    Users,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 
@@ -26,6 +27,12 @@ const initials = computed(() =>
 );
 
 const menu = [
+    {
+        href: '/settings/team',
+        label: 'Team',
+        description: 'Invite people and assign work',
+        icon: Users,
+    },
     {
         href: '/settings/profile',
         label: 'Edit profile',
