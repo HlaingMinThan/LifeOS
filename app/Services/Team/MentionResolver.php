@@ -16,7 +16,7 @@ class MentionResolver
 
     /**
      * @return array{assignee: User|null, handle: string|null, text: string}
-     *                                                                     `text` is the command with the mention removed, ready to parse.
+     *                                                                       `text` is the command with the mention removed, ready to parse.
      */
     public function resolve(string $text, User $owner): array
     {

@@ -45,6 +45,7 @@ type Parsed = {
 };
 
 const props = defineProps<{
+    teammates: Assignee[];
     focus: Todo | null;
     nextUp: Todo | null;
     overdue: Todo[];
@@ -137,6 +138,25 @@ const DATED_ACTIONS = [
 const text = ref('');
 // Set when the command opened with @handle — the task goes to them, not me.
 const assignee = ref<Assignee | null>(null);
+
+// Typing "@par" offers teammates; tapping one completes the handle.
+const mentionQuery = computed(() => {
+    const m = text.value.match(/(?:^|\s)@([A-Za-z0-9._-]*)$/);
+    return m ? m[1].toLowerCase() : null;
+});
+const mentionSuggestions = computed(() => {
+    const q = mentionQuery.value;
+    if (q === null || !props.teammates.length) return [];
+    return props.teammates.filter(
+        (mate) =>
+            !q ||
+            (mate.username ?? '').toLowerCase().startsWith(q) ||
+            mate.name.toLowerCase().includes(q),
+    );
+});
+function pickMention(mate: Assignee) {
+    text.value = text.value.replace(/@[A-Za-z0-9._-]*$/, `@${mate.username} `);
+}
 const state = ref<'idle' | 'parsing' | 'confirm' | 'applying' | 'applied'>(
     'idle',
 );
@@ -317,6 +337,29 @@ function dismiss() {
             <Send v-else class="h-5 w-5" />
         </button>
     </form>
+
+    <!-- @ autocomplete: tap a teammate instead of typing the handle exactly -->
+    <ul
+        v-if="mentionSuggestions.length"
+        class="mt-2 overflow-hidden rounded-xl border border-blue-500/40 bg-card"
+    >
+        <li v-for="mate in mentionSuggestions" :key="mate.id">
+            <button
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                @click="pickMention(mate)"
+            >
+                <span
+                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white"
+                >
+                    {{ mate.name.slice(0, 2).toUpperCase() }}
+                </span>
+                <span class="truncate">{{ mate.name }}</span>
+                <span class="ml-auto shrink-0 text-xs text-muted-foreground">
+                    @{{ mate.username }}
+                </span>
+            </button>
+        </li>
+    </ul>
 
     <p v-if="error" class="mt-2 text-sm text-red-500">{{ error }}</p>
 

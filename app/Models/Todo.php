@@ -6,6 +6,7 @@ use App\Concerns\BelongsToUser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Todo extends Model
@@ -33,9 +34,9 @@ class Todo extends Model
      * it is set from the assigning relation, so a request cannot forge
      * provenance and grant itself sight of someone else's list.
      *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<User, $this>
+     * @return BelongsTo<User, $this>
      */
-    public function assignedBy(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function assignedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_by_id');
     }

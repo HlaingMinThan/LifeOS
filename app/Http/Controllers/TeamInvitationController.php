@@ -23,7 +23,9 @@ class TeamInvitationController extends Controller
         $invitation = TeamMember::where('token', $token)->with('owner')->firstOrFail();
 
         if (! $request->user()) {
-            $request->session()->put('team_invitation_token', $token);
+            // Fortify consumes url.intended after login *or* registration, so
+            // whichever route they take, they come back here to accept.
+            $request->session()->put('url.intended', route('team.invitation.show', $token));
 
             return redirect()->route('register', ['email' => $invitation->email]);
         }
@@ -44,8 +46,6 @@ class TeamInvitationController extends Controller
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors());
         }
-
-        $request->session()->forget('team_invitation_token');
 
         return redirect()->route('team.index');
     }

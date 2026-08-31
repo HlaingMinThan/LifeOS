@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Mail\TeamInvitation;
 use App\Models\LedgerEntry;
 use App\Models\TeamMember;
 use App\Models\Todo;
 use App\Models\User;
 use App\Services\Team\MentionResolver;
+use App\Services\Team\TeamService;
+use App\Services\Telegram\InboxBridge;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -53,7 +56,7 @@ class TeamAssignmentTest extends TestCase
         $invitation = TeamMember::first();
         $this->assertSame('pending', $invitation->status);
         $this->assertSame($this->member->id, $invitation->member_id);
-        Mail::assertSent(\App\Mail\TeamInvitation::class);
+        Mail::assertSent(TeamInvitation::class);
     }
 
     public function test_an_unregistered_email_can_still_be_invited(): void
@@ -136,6 +139,43 @@ class TeamAssignmentTest extends TestCase
         ])->assertStatus(422);
 
         $this->assertSame(0, Todo::count());
+    }
+
+    public function test_telegram_mention_assigns_and_confirms(): void
+    {
+        $this->joinTeam();
+
+        $reply = app(InboxBridge::class)->handle(
+            ['chat' => ['id' => '1'], 'text' => '@zayarwin buy dog food tomorrow'],
+            $this->owner,
+        );
+
+        $this->assertStringContainsString('📤 Assigned to Zayar Win', $reply);
+        $this->assertSame($this->member->id, Todo::first()->user_id);
+    }
+
+    public function test_telegram_mention_of_an_unknown_handle_explains_itself(): void
+    {
+        $reply = app(InboxBridge::class)->handle(
+            ['chat' => ['id' => '1'], 'text' => '@ghost do a thing'],
+            $this->owner,
+        );
+
+        $this->assertStringContainsString('No teammate matches @ghost', $reply);
+        $this->assertSame(0, Todo::count());
+    }
+
+    public function test_guest_opening_an_invite_returns_to_it_after_signing_up(): void
+    {
+        $token = app(TeamService::class)
+            ->invite($this->owner, 'new@example.com')->token;
+
+        // As a guest — no actingAs, so the invite must send them to register.
+        $this->get("/invite/{$token}")
+            ->assertRedirect(route('register', ['email' => 'new@example.com']));
+
+        // Fortify consumes url.intended after registering, landing them back.
+        $this->assertSame(route('team.invitation.show', $token), session('url.intended'));
     }
 
     // --- the privacy boundary -------------------------------------------

@@ -18,6 +18,14 @@ class HomeController extends Controller
         $ideas = $user->ideas()->where('status', 'parked')->orderBy('id')->get();
 
         return Inertia::render('os/Home', [
+            // Powers the @ autocomplete in the magic box — handles are hard to
+            // type exactly on a phone.
+            'teammates' => $user->teammates()
+                ->map(fn ($mate) => [
+                    'id' => $mate->id,
+                    'name' => $mate->name,
+                    'username' => $mate->username,
+                ])->values(),
             'focus' => $user->todos()->open()->where('focused', true)->first(),
             // The single next thing to do: soonest today-or-later (or undated)
             // open todo, timed before untimed, excluding the focused one.

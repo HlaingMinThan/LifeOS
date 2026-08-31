@@ -8,6 +8,8 @@ use App\Services\Inbox\BrainDumpParser;
 use App\Services\Inbox\ClaudeParser;
 use App\Services\Inbox\InboxApplier;
 use App\Services\Inbox\ParserContract;
+use App\Services\Team\MentionResolver;
+use App\Services\Team\TaskAssigner;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
@@ -39,8 +41,8 @@ class InboxBridge
         private InboxApplier $applier,
         private DigestBuilder $digest,
         private TelegramClient $telegram,
-        private \App\Services\Team\MentionResolver $mentions,
-        private \App\Services\Team\TaskAssigner $assigner,
+        private MentionResolver $mentions,
+        private TaskAssigner $assigner,
     ) {}
 
     /**

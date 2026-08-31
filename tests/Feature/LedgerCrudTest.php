@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Contact;
 use App\Models\LedgerEntry;
 use App\Models\User;
+use App\Services\DigestBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -55,7 +57,7 @@ class LedgerCrudTest extends TestCase
     {
         // Magic-box entries link a contact whose name matches the original
         // title; the rename must win over that link, in app and digest.
-        $contact = \App\Models\Contact::factory()->for($this->user)->create(['name' => 'Cargo Pro']);
+        $contact = Contact::factory()->for($this->user)->create(['name' => 'Cargo Pro']);
         $entry = LedgerEntry::factory()->for($this->user)->create([
             'contact_id' => $contact->id,
             'direction' => 'receivable',
@@ -74,13 +76,13 @@ class LedgerCrudTest extends TestCase
 
         $this->assertStringContainsString(
             'Cargo Pro — March delivery batch',
-            app(\App\Services\DigestBuilder::class)->build($this->user),
+            app(DigestBuilder::class)->build($this->user),
         );
     }
 
     public function test_renaming_away_from_a_contact_drops_the_stale_link(): void
     {
-        $contact = \App\Models\Contact::factory()->for($this->user)->create(['name' => 'Gon Khaung']);
+        $contact = Contact::factory()->for($this->user)->create(['name' => 'Gon Khaung']);
         $entry = LedgerEntry::factory()->for($this->user)->create([
             'contact_id' => $contact->id, 'title' => 'Gon Khaung', 'direction' => 'payable',
         ]);
@@ -95,7 +97,7 @@ class LedgerCrudTest extends TestCase
 
     public function test_renaming_that_still_names_the_contact_keeps_the_link(): void
     {
-        $contact = \App\Models\Contact::factory()->for($this->user)->create([
+        $contact = Contact::factory()->for($this->user)->create([
             'name' => 'Gon Khaung', 'aliases' => ['ဂွန်ခေါင်'],
         ]);
         $entry = LedgerEntry::factory()->for($this->user)->create([

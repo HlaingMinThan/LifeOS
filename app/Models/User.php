@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -145,7 +146,7 @@ class User extends Authenticatable implements PasskeyUser
     }
 
     /** Accepted members of my team, resolved to accounts. */
-    public function teammates(): \Illuminate\Support\Collection
+    public function teammates(): Collection
     {
         return $this->teamMembers()->accepted()->with('member')->get()
             ->pluck('member')->filter()->values();
