@@ -6,7 +6,9 @@ use App\Mail\TeamInvitation;
 use App\Models\TeamMember;
 use App\Models\User;
 use App\Services\Telegram\TelegramClient;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -30,7 +32,10 @@ class TeamService
 
         $existing = $owner->teamMembers()->where('email', $email)->first();
 
-        if ($existing?->isAccepted()) {
+        // Accepted only counts when there is an account behind it. A row marked
+        // accepted with no member_id is half-finished, not a membership, and
+        // must stay re-invitable rather than blocking itself forever.
+        if ($existing?->isAccepted() && $existing->member_id) {
             throw ValidationException::withMessages([
                 'email' => 'They are already on your team.',
             ]);
@@ -57,6 +62,77 @@ class TeamService
         $this->deliver($invitation, $owner, $invitee);
 
         return $invitation;
+    }
+
+    /**
+     * Create the account an invite is for. The invitation went to this
+     * address, which is why it counts as verified — without that they could
+     * not reach the page that replaces the default password.
+     */
+    public function createAccountFor(string $email): User
+    {
+        $name = $this->nameFromEmail($email);
+
+        $user = User::create([
+            'name' => $name,
+            'email' => $email,
+            'password' => Hash::make((string) config('lifeos.invite_password')),
+        ]);
+
+        $user->forceFill([
+            'username' => $this->uniqueUsername($name, $email),
+            'email_verified_at' => now(),
+        ])->save();
+
+        return $user;
+    }
+
+    /**
+     * Put someone on the team outright — used by `team:add` when handing over
+     * a link is not practical. Creates the account if it does not exist yet.
+     */
+    public function addMember(User $owner, string $email): TeamMember
+    {
+        $email = mb_strtolower(trim($email));
+        $invitation = $this->invite($owner, $email);
+
+        $member = User::where('email', $email)->first() ?? $this->createAccountFor($email);
+
+        $invitation->member()->associate($member);
+        $invitation->status = 'accepted';
+        $invitation->accepted_at = now();
+        $invitation->save();
+
+        return $invitation->refresh();
+    }
+
+    /** "zayar.win@example.com" → "Zayar Win", so greetings are not addresses. */
+    private function nameFromEmail(string $email): string
+    {
+        $local = Str::before($email, '@');
+
+        return Str::of($local)->replaceMatches('/[._-]+/', ' ')->trim()->title()->value()
+            ?: $local;
+    }
+
+    private function uniqueUsername(string $name, string $email): string
+    {
+        $base = Str::of($name)->lower()->replaceMatches('/[^a-z0-9]/', '')->value();
+
+        if ($base === '') {
+            $base = Str::of($email)->before('@')->lower()
+                ->replaceMatches('/[^a-z0-9]/', '')->value();
+        }
+
+        $base = $base !== '' ? $base : 'user';
+        $handle = $base;
+        $suffix = 2;
+
+        while (User::where('username', $handle)->exists()) {
+            $handle = $base.$suffix++;
+        }
+
+        return $handle;
     }
 
     /** Accept by token. The signed-in account becomes the member. */
