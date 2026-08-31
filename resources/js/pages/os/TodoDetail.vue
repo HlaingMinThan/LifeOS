@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Check, Save, Target, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Check, Save, Target, Trash2, UserRound } from 'lucide-vue-next';
 import { computed, reactive } from 'vue';
 import DateTimeField from '@/components/DateTimeField.vue';
 import RichEditor from '@/components/RichEditor.vue';
 
+type Person = { id: number; name: string; username: string | null };
 type Todo = {
     id: number;
     title: string;
@@ -14,9 +15,15 @@ type Todo = {
     focused: boolean;
     due_date: string | null;
     due_time: string | null;
+    assigned_by_id: number | null;
+    user?: Person | null;
+    assigned_by?: Person | null;
 };
 
-const props = defineProps<{ todo: Todo }>();
+const props = withDefaults(
+    defineProps<{ todo: Todo; viewerIsAssigner?: boolean }>(),
+    { viewerIsAssigner: false },
+);
 
 const initial = () => ({
     title: props.todo.title,
@@ -57,17 +64,56 @@ const toggleFocus = () =>
 // about to stop existing. Explicit, so it survives a stripped Referer.
 const remove = () => router.delete(`/todos/${props.todo.id}?from=detail`);
 
-const backHref = props.todo.due_date
-    ? `/todos/day/${props.todo.due_date.slice(0, 10)}`
-    : '/todos/day/undated';
+const backHref = computed(() => {
+    if (props.viewerIsAssigner) return '/settings/team';
+    return props.todo.due_date
+        ? `/todos/day/${props.todo.due_date.slice(0, 10)}`
+        : '/todos/day/undated';
+});
 </script>
 
 <template>
     <Head :title="todo.title" />
 
     <Link :href="backHref" class="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
-        <ArrowLeft class="h-3.5 w-3.5" /> Back
+        <ArrowLeft class="h-3.5 w-3.5" /> {{ viewerIsAssigner ? 'Team' : 'Back' }}
     </Link>
+
+    <!-- Whose task this is. Only shown when someone else is involved. -->
+    <div
+        v-if="viewerIsAssigner || todo.assigned_by"
+        class="mb-3 flex items-center gap-2 rounded-xl border p-3"
+        :class="
+            viewerIsAssigner
+                ? 'border-blue-500/40 bg-blue-500/5'
+                : 'border-primary/40 bg-primary/5'
+        "
+    >
+        <span
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
+            :class="viewerIsAssigner ? 'bg-blue-500' : 'bg-gradient-brand'"
+        >
+            <UserRound class="h-4 w-4" />
+        </span>
+        <div class="min-w-0 text-xs">
+            <template v-if="viewerIsAssigner">
+                <p class="font-semibold text-blue-600 dark:text-blue-400">
+                    Assigned to {{ todo.user?.name }}
+                </p>
+                <p class="text-muted-foreground">
+                    In their list — you can edit or withdraw it.
+                </p>
+            </template>
+            <template v-else>
+                <p class="font-semibold text-primary">
+                    From {{ todo.assigned_by?.name }}
+                </p>
+                <p class="text-muted-foreground">
+                    They'll be told when you mark it done.
+                </p>
+            </template>
+        </div>
+    </div>
 
     <input
         v-model="form.title"
@@ -90,6 +136,7 @@ const backHref = props.todo.due_date
             {{ todo.status === 'done' ? 'Done' : 'Mark done' }}
         </button>
         <button
+            v-if="!viewerIsAssigner"
             class="flex items-center justify-center gap-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
             :class="
                 todo.focused

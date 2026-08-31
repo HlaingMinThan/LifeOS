@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Todo;
+use App\Services\Team\TaskAssigner;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -37,7 +38,8 @@ class TodoController extends Controller
     /** One day's todos. "undated" = dateless bucket, "overdue" = all past-due open. */
     public function day(Request $request, string $date): Response
     {
-        $todos = $request->user()->todos()->latest();
+        // assignedBy drives the "from <name>" badge on delegated work.
+        $todos = $request->user()->todos()->with('assignedBy:id,name')->latest();
 
         $todos = match ($date) {
             'undated' => $todos->orderByRaw("status = 'open' desc")->whereNull('due_date'),
@@ -55,7 +57,14 @@ class TodoController extends Controller
     /** Full detail page with the rich-text description editor. */
     public function show(Request $request, int $todo): Response
     {
-        return Inertia::render('os/TodoDetail', ['todo' => $this->find($request, $todo)]);
+        $model = $this->findAccessible($request, $todo);
+
+        return Inertia::render('os/TodoDetail', [
+            'todo' => $model,
+            // Whose list this lives in decides the header and what may be edited.
+            'viewerIsAssigner' => $model->assigned_by_id === $request->user()->id
+                && $model->user_id !== $request->user()->id,
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -67,7 +76,7 @@ class TodoController extends Controller
 
     public function update(Request $request, int $todo): RedirectResponse
     {
-        $model = $this->find($request, $todo);
+        $model = $this->findAccessible($request, $todo);
         $validated = $this->validated($request);
 
         // Rescheduling re-arms the reminder.
@@ -81,13 +90,18 @@ class TodoController extends Controller
         return back();
     }
 
-    public function toggle(Request $request, int $todo): RedirectResponse
+    public function toggle(Request $request, int $todo, TaskAssigner $assigner): RedirectResponse
     {
-        $model = $this->find($request, $todo);
+        $model = $this->findAccessible($request, $todo);
         $done = $model->status === 'open';
         $model->update($done
             ? ['status' => 'done', 'done_at' => now(), 'focused' => false]
             : ['status' => 'open', 'done_at' => null]);
+
+        // Tracking assigned work is the point — tell the assigner it landed.
+        if ($done && $model->assigned_by_id !== $request->user()->id) {
+            $assigner->notifyCompleted($model->fresh(['user', 'assignedBy']));
+        }
 
         return back();
     }
@@ -110,7 +124,7 @@ class TodoController extends Controller
 
     public function destroy(Request $request, int $todo): RedirectResponse
     {
-        $model = $this->find($request, $todo);
+        $model = $this->findAccessible($request, $todo);
         $model->delete();
 
         // Deleting from the todo's own detail page: back() would return to that
@@ -126,7 +140,22 @@ class TodoController extends Controller
         return back();
     }
 
-    /** Resolve through the owner, so another user's id is a 404, not a leak. */
+    /**
+     * Own todos, plus ones I assigned to a teammate — and nothing else of
+     * theirs. Assignment is the only crack in the per-account wall, so it is
+     * kept to exactly the rows this user created in someone else's list.
+     */
+    private function findAccessible(Request $request, int $id): Todo
+    {
+        $user = $request->user();
+
+        return Todo::with(['user:id,name,username', 'assignedBy:id,name,username'])
+            ->where('id', $id)
+            ->where(fn ($q) => $q->where('user_id', $user->id)
+                ->orWhere('assigned_by_id', $user->id))
+            ->firstOrFail();
+    }
+
     private function find(Request $request, int $id): Todo
     {
         return $request->user()->todos()->findOrFail($id);

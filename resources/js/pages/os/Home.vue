@@ -33,6 +33,7 @@ type Todo = {
     due_time: string | null;
 };
 type CareTask = { id: number; title: string };
+type Assignee = { id: number; name: string; username: string | null };
 type Parsed = {
     action: string;
     target: string | null;
@@ -134,6 +135,8 @@ const DATED_ACTIONS = [
 ];
 
 const text = ref('');
+// Set when the command opened with @handle — the task goes to them, not me.
+const assignee = ref<Assignee | null>(null);
 const state = ref<'idle' | 'parsing' | 'confirm' | 'applying' | 'applied'>(
     'idle',
 );
@@ -148,13 +151,16 @@ async function parse() {
     error.value = '';
     state.value = 'parsing';
     try {
-        const res = await apiPost<{ raw_text: string; parsed: Parsed }>(
-            '/inbox/parse',
-            {
-                text: text.value,
-            },
-        );
+        const res = await apiPost<{
+            raw_text: string;
+            parsed: Parsed;
+            assignee: Assignee | null;
+        }>('/inbox/parse', {
+            text: text.value,
+        });
         parsed.value = res.parsed;
+        // Set when the text opened with @handle — the task goes to them.
+        assignee.value = res.assignee;
         originalParsed.value = JSON.stringify(res.parsed);
         rawText.value = res.raw_text;
         state.value = 'confirm';
@@ -173,8 +179,9 @@ async function apply() {
             parsed: parsed.value,
             // A changed parse is a correction — the parser learns from it.
             corrected: JSON.stringify(parsed.value) !== originalParsed.value,
+            assignee_id: assignee.value?.id ?? null,
         });
-        lastEventId.value = res.event_id;
+        lastEventId.value = res.event_id ?? null;
         state.value = 'applied';
         text.value = '';
         router.reload();
@@ -198,6 +205,7 @@ async function undo() {
 function dismiss() {
     state.value = 'idle';
     parsed.value = null;
+    assignee.value = null;
     lastEventId.value = null;
 }
 </script>
@@ -316,8 +324,20 @@ function dismiss() {
     <Transition name="form">
         <div
             v-if="(state === 'confirm' || state === 'applying') && parsed"
-            class="mt-3 rounded-xl border border-primary/40 bg-primary/5 p-4"
+            class="mt-3 rounded-xl border p-4"
+            :class="
+                assignee
+                    ? 'border-blue-500/50 bg-blue-500/5'
+                    : 'border-primary/40 bg-primary/5'
+            "
         >
+            <p
+                v-if="assignee"
+                class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400"
+            >
+                <UserRound class="h-3.5 w-3.5" />
+                Assigning to {{ assignee.name }}
+            </p>
             <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1 space-y-2">
                     <select
@@ -439,11 +459,12 @@ function dismiss() {
             v-if="state === 'applied'"
             class="mt-3 flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/5 p-3"
         >
-            <span class="text-sm text-green-600 dark:text-green-400"
-                >Applied ✓</span
-            >
+            <span class="text-sm text-green-600 dark:text-green-400">{{
+                lastEventId ? 'Applied ✓' : 'Assigned ✓'
+            }}</span>
             <div class="flex gap-3">
                 <button
+                    v-if="lastEventId"
                     class="flex items-center gap-1 text-sm text-muted-foreground"
                     @click="undo"
                 >

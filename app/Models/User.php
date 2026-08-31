@@ -125,4 +125,34 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->hasMany(ParserExample::class);
     }
+
+    /** People I invited into my team (any status). */
+    public function teamMembers(): HasMany
+    {
+        return $this->hasMany(TeamMember::class, 'owner_id');
+    }
+
+    /** Teams I belong to — i.e. who may assign work to me. */
+    public function teamMemberships(): HasMany
+    {
+        return $this->hasMany(TeamMember::class, 'member_id');
+    }
+
+    /** Todos I handed to teammates — the only ones I may see of theirs. */
+    public function assignedTodos(): HasMany
+    {
+        return $this->hasMany(Todo::class, 'assigned_by_id');
+    }
+
+    /** Accepted members of my team, resolved to accounts. */
+    public function teammates(): \Illuminate\Support\Collection
+    {
+        return $this->teamMembers()->accepted()->with('member')->get()
+            ->pluck('member')->filter()->values();
+    }
+
+    public function canAssignTo(User $other): bool
+    {
+        return $this->teamMembers()->accepted()->where('member_id', $other->id)->exists();
+    }
 }

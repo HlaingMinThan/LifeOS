@@ -7,6 +7,7 @@ use App\Http\Controllers\InboxController;
 use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\OnboardController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TodoController;
 use Illuminate\Support\Facades\Route;
@@ -16,6 +17,11 @@ use Illuminate\Support\Facades\Route;
 // secret_token header authenticates the request (see the controller).
 Route::post('/telegram/webhook/{secret}', TelegramWebhookController::class)
     ->name('telegram.webhook');
+
+// Invite links are public so a guest can land, register, then accept.
+Route::get('/invite/{token}', [TeamInvitationController::class, 'show'])->name('team.invitation.show');
+Route::post('/invite/{token}', [TeamInvitationController::class, 'accept'])
+    ->middleware('auth')->name('team.invitation.accept');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/', [HomeController::class, 'index'])->name('home');

@@ -28,6 +28,23 @@ class Todo extends Model
         ];
     }
 
+    /**
+     * Who assigned this to me, if anyone. Like user_id this is never fillable —
+     * it is set from the assigning relation, so a request cannot forge
+     * provenance and grant itself sight of someone else's list.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<User, $this>
+     */
+    public function assignedBy(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_by_id');
+    }
+
+    public function isAssigned(): bool
+    {
+        return $this->assigned_by_id !== null;
+    }
+
     /** Open, has a time, not yet reminded, and that moment has passed. */
     public function scopeDueForReminder(Builder $query): Builder
     {
