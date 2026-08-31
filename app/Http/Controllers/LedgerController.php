@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\CategorizeLedgerEntries;
 use App\Models\LedgerEntry;
 use App\Services\Inbox\ClaudeParser;
+use App\Services\Money\CategorizerService;
 use App\Services\Money\ReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -128,6 +129,19 @@ class LedgerController extends Controller
         ]);
     }
 
+    /** One entry in full: the screenshot, the note, and everything editable. */
+    public function show(Request $request, int $entry): Response
+    {
+        $model = $this->find($request, $entry)->load('contact');
+
+        return Inertia::render('os/MoneyEntry', [
+            'entry' => $model,
+            // The labels already in use, so re-categorizing is a tap rather
+            // than retyping a name that has to match exactly to group.
+            'categories' => app(CategorizerService::class)->existingCategories($request->user()),
+        ]);
+    }
+
     /** Parse an uploaded screenshot with Claude vision and return extracted fields. */
     public function parseScreenshot(Request $request): JsonResponse
     {
@@ -237,12 +251,22 @@ class LedgerController extends Controller
     public function destroy(Request $request, int $entry): RedirectResponse
     {
         $model = $this->find($request, $entry);
+        $settledOn = ($model->paid_at ?? $model->due_date)?->toDateString();
 
         if ($model->image) {
             Storage::disk('public')->delete($model->image);
         }
 
         $model->delete();
+
+        // Deleting from the entry's own detail page: back() would return to a
+        // page that no longer exists. Send them to the day it belonged to.
+        // Other callers (the money and day lists) keep their place via back().
+        if ($request->query('from') === 'detail') {
+            return $settledOn
+                ? redirect()->route('money.day', $settledOn)
+                : redirect()->route('money');
+        }
 
         return back();
     }

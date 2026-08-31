@@ -37,6 +37,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/money/day/{date}', [LedgerController::class, 'day'])->name('money.day');
     Route::post('/ledger/parse-screenshot', [LedgerController::class, 'parseScreenshot'])->name('ledger.parse-screenshot');
     Route::post('/ledger', [LedgerController::class, 'store'])->name('ledger.store');
+    Route::get('/ledger/{entry}', [LedgerController::class, 'show'])->whereNumber('entry')->name('ledger.show');
     Route::patch('/ledger/{entry}/toggle', [LedgerController::class, 'toggle'])->name('ledger.toggle');
     Route::patch('/ledger/{entry}', [LedgerController::class, 'update'])->name('ledger.update');
     Route::delete('/ledger/{entry}', [LedgerController::class, 'destroy'])->name('ledger.destroy');

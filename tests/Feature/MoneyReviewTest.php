@@ -488,6 +488,84 @@ class MoneyReviewTest extends TestCase
         $this->get('/money/review')->assertRedirect('/login');
     }
 
+    // --- Entry detail page -----------------------------------------------
+
+    public function test_entry_detail_shows_the_entry_and_known_categories(): void
+    {
+        $this->settled('payable', 30_000, '2026-08-05', 'Rent');
+        $entry = $this->settled('payable', 12_000, '2026-08-06', 'Food & Drinks');
+
+        $this->actingAs($this->user)->get("/ledger/{$entry->id}")
+            ->assertInertia(fn ($page) => $page
+                ->component('os/MoneyEntry')
+                ->where('entry.id', $entry->id)
+                ->where('entry.category', 'Food & Drinks')
+                ->where('categories', ['Food & Drinks', 'Rent']));
+    }
+
+    public function test_entry_detail_is_scoped_to_its_owner(): void
+    {
+        $other = User::factory()->create();
+        $theirs = LedgerEntry::factory()->for($other)->create();
+
+        $this->actingAs($this->user)->get("/ledger/{$theirs->id}")->assertNotFound();
+    }
+
+    public function test_entry_detail_requires_login(): void
+    {
+        $entry = LedgerEntry::factory()->for($this->user)->create();
+
+        $this->get("/ledger/{$entry->id}")->assertRedirect('/login');
+    }
+
+    public function test_category_can_be_changed_from_the_detail_page(): void
+    {
+        $entry = $this->settled('payable', 12_000, '2026-08-06', 'Food & Drinks');
+
+        $this->actingAs($this->user)->patch("/ledger/{$entry->id}", [
+            'direction' => 'payable',
+            'title' => $entry->title,
+            'amount_mmk' => $entry->amount_mmk,
+            'category' => 'Groceries',
+        ])->assertRedirect();
+
+        $this->assertSame('Groceries', $entry->fresh()->category);
+    }
+
+    /** back() would return to a page that no longer exists. */
+    public function test_deleting_from_the_detail_page_lands_on_the_entrys_day(): void
+    {
+        $entry = $this->settled('payable', 12_000, '2026-08-06');
+
+        $this->actingAs($this->user)
+            ->delete("/ledger/{$entry->id}?from=detail")
+            ->assertRedirect('/money/day/2026-08-06');
+
+        $this->assertSoftDeleted($entry);
+    }
+
+    public function test_deleting_a_dateless_entry_from_detail_lands_on_money(): void
+    {
+        $entry = LedgerEntry::factory()->for($this->user)->create([
+            'status' => 'open', 'due_date' => null, 'paid_at' => null,
+        ]);
+
+        $this->actingAs($this->user)
+            ->delete("/ledger/{$entry->id}?from=detail")
+            ->assertRedirect('/money');
+    }
+
+    /** List callers keep their place — only the detail page redirects away. */
+    public function test_deleting_from_a_list_still_goes_back(): void
+    {
+        $entry = $this->settled('payable', 12_000, '2026-08-06');
+
+        $this->actingAs($this->user)
+            ->from('/money')
+            ->delete("/ledger/{$entry->id}")
+            ->assertRedirect('/money');
+    }
+
     // --- Category rename -------------------------------------------------
 
     public function test_renaming_a_category_updates_every_entry_carrying_it(): void

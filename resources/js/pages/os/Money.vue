@@ -503,7 +503,7 @@ const groups = computed(() =>
                             >
                                 <Check class="h-4 w-4" />
                             </button>
-                            <div class="min-w-0 flex-1">
+                            <Link :href="`/ledger/${e.id}`" class="min-w-0 flex-1">
                                 <div class="flex items-baseline justify-between gap-2">
                                     <p class="truncate text-sm font-medium">{{ e.title }}</p>
                                     <p
@@ -529,7 +529,7 @@ const groups = computed(() =>
                                 >
                                     {{ e.category }}
                                 </span>
-                            </div>
+                            </Link>
                             <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(e)">
                                 <Pencil class="h-4 w-4" />
                             </button>

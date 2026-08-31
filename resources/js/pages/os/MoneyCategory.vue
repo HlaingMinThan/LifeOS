@@ -203,11 +203,11 @@ function openMonth(month: string) {
         </p>
 
         <ul v-else class="mt-2 space-y-2">
-            <li
-                v-for="e in entries"
-                :key="e.id"
-                class="rounded-xl border border-border bg-card p-3"
-            >
+            <li v-for="e in entries" :key="e.id">
+                <Link
+                    :href="`/ledger/${e.id}`"
+                    class="block rounded-xl border border-border bg-card p-3"
+                >
                 <div class="flex items-baseline justify-between gap-2">
                     <p class="min-w-0 truncate text-sm font-medium">{{ e.title }}</p>
                     <p class="shrink-0 text-sm font-bold tabular-nums text-rose-400">
@@ -225,6 +225,7 @@ function openMonth(month: string) {
                 <p v-if="e.note" class="mt-0.5 truncate text-xs text-muted-foreground/70">
                     {{ e.note }}
                 </p>
+                </Link>
             </li>
         </ul>
     </section>
