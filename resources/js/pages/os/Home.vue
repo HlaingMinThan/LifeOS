@@ -33,6 +33,13 @@ type Todo = {
     due_time: string | null;
 };
 type CareTask = { id: number; title: string };
+type WeekTodo = Todo & {
+    user_id: number;
+    assigned_by_id: number | null;
+    user?: { id: number; name: string } | null;
+    assigned_by?: { id: number; name: string } | null;
+};
+type Assignee = { id: number; name: string; username: string | null };
 type Parsed = {
     action: string;
     target: string | null;
@@ -44,6 +51,9 @@ type Parsed = {
 };
 
 const props = defineProps<{
+    weekTodos: WeekTodo[];
+    weekCount: number;
+    teammates: Assignee[];
     focus: Todo | null;
     nextUp: Todo | null;
     overdue: Todo[];
@@ -97,6 +107,22 @@ const clearFocus = () => {
 const setFocus = (t: Todo) =>
     router.patch(`/todos/${t.id}/focus`, {}, { preserveScroll: true });
 
+/** Name to show on a week row: the teammate it went to, or who sent it to me. */
+function weekOwner(t: WeekTodo): string | null {
+    if (t.assigned_by_id && t.user && t.assigned_by_id !== t.user_id) {
+        return t.user.name;
+    }
+    return t.assigned_by ? `from ${t.assigned_by.name}` : null;
+}
+
+function weekDayLabel(t: WeekTodo): string {
+    if (!t.due_date) return '';
+    const date = t.due_date.slice(0, 10);
+    if (date === todayIso) return 'Today';
+    if (date === tomorrowIso) return 'Tmr';
+    return new Date(date).toLocaleDateString('en-GB', { weekday: 'short' });
+}
+
 const dismissPrompt = () =>
     router.patch(dismissTelegram().url, {}, { preserveScroll: true });
 const dismissNotificationPrompt = () =>
@@ -134,6 +160,27 @@ const DATED_ACTIONS = [
 ];
 
 const text = ref('');
+// Set when the command opened with @handle — the task goes to them, not me.
+const assignee = ref<Assignee | null>(null);
+
+// Typing "@par" offers teammates; tapping one completes the handle.
+const mentionQuery = computed(() => {
+    const m = text.value.match(/(?:^|\s)@([A-Za-z0-9._-]*)$/);
+    return m ? m[1].toLowerCase() : null;
+});
+const mentionSuggestions = computed(() => {
+    const q = mentionQuery.value;
+    if (q === null || !props.teammates.length) return [];
+    return props.teammates.filter(
+        (mate) =>
+            !q ||
+            (mate.username ?? '').toLowerCase().startsWith(q) ||
+            mate.name.toLowerCase().includes(q),
+    );
+});
+function pickMention(mate: Assignee) {
+    text.value = text.value.replace(/@[A-Za-z0-9._-]*$/, `@${mate.username} `);
+}
 const state = ref<'idle' | 'parsing' | 'confirm' | 'applying' | 'applied'>(
     'idle',
 );
@@ -148,13 +195,16 @@ async function parse() {
     error.value = '';
     state.value = 'parsing';
     try {
-        const res = await apiPost<{ raw_text: string; parsed: Parsed }>(
-            '/inbox/parse',
-            {
-                text: text.value,
-            },
-        );
+        const res = await apiPost<{
+            raw_text: string;
+            parsed: Parsed;
+            assignee: Assignee | null;
+        }>('/inbox/parse', {
+            text: text.value,
+        });
         parsed.value = res.parsed;
+        // Set when the text opened with @handle — the task goes to them.
+        assignee.value = res.assignee;
         originalParsed.value = JSON.stringify(res.parsed);
         rawText.value = res.raw_text;
         state.value = 'confirm';
@@ -173,8 +223,9 @@ async function apply() {
             parsed: parsed.value,
             // A changed parse is a correction — the parser learns from it.
             corrected: JSON.stringify(parsed.value) !== originalParsed.value,
+            assignee_id: assignee.value?.id ?? null,
         });
-        lastEventId.value = res.event_id;
+        lastEventId.value = res.event_id ?? null;
         state.value = 'applied';
         text.value = '';
         router.reload();
@@ -198,6 +249,7 @@ async function undo() {
 function dismiss() {
     state.value = 'idle';
     parsed.value = null;
+    assignee.value = null;
     lastEventId.value = null;
 }
 </script>
@@ -310,14 +362,49 @@ function dismiss() {
         </button>
     </form>
 
+    <!-- @ autocomplete: tap a teammate instead of typing the handle exactly -->
+    <ul
+        v-if="mentionSuggestions.length"
+        class="mt-2 overflow-hidden rounded-xl border border-blue-500/40 bg-card"
+    >
+        <li v-for="mate in mentionSuggestions" :key="mate.id">
+            <button
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                @click="pickMention(mate)"
+            >
+                <span
+                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white"
+                >
+                    {{ mate.name.slice(0, 2).toUpperCase() }}
+                </span>
+                <span class="truncate">{{ mate.name }}</span>
+                <span class="ml-auto shrink-0 text-xs text-muted-foreground">
+                    @{{ mate.username }}
+                </span>
+            </button>
+        </li>
+    </ul>
+
     <p v-if="error" class="mt-2 text-sm text-red-500">{{ error }}</p>
 
     <!-- Confirm chip: editable — nothing is written until this is accepted -->
     <Transition name="form">
         <div
             v-if="(state === 'confirm' || state === 'applying') && parsed"
-            class="mt-3 rounded-xl border border-primary/40 bg-primary/5 p-4"
+            class="mt-3 rounded-xl border p-4"
+            :class="
+                assignee
+                    ? 'border-blue-500/50 bg-blue-500/5'
+                    : 'border-primary/40 bg-primary/5'
+            "
         >
+            <p
+                v-if="assignee"
+                class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400"
+            >
+                <UserRound class="h-3.5 w-3.5" />
+                Assigning to {{ assignee.name }}
+            </p>
             <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1 space-y-2">
                     <select
@@ -439,11 +526,12 @@ function dismiss() {
             v-if="state === 'applied'"
             class="mt-3 flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/5 p-3"
         >
-            <span class="text-sm text-green-600 dark:text-green-400"
-                >Applied ✓</span
-            >
+            <span class="text-sm text-green-600 dark:text-green-400">{{
+                lastEventId ? 'Applied ✓' : 'Assigned ✓'
+            }}</span>
             <div class="flex gap-3">
                 <button
+                    v-if="lastEventId"
                     class="flex items-center gap-1 text-sm text-muted-foreground"
                     @click="undo"
                 >
@@ -636,6 +724,42 @@ function dismiss() {
                 </ul>
             </section>
         </Link>
+
+        <!-- 📆 This week: mine plus what I handed to the team -->
+        <section v-if="weekTodos.length" class="rounded-xl border border-border bg-card p-4">
+            <h2 class="flex items-center justify-between text-sm font-medium text-muted-foreground">
+                📆 This week
+                <Link href="/todos/week" class="text-xs text-primary">
+                    view all {{ weekCount }} →
+                </Link>
+            </h2>
+            <ul class="mt-2 divide-y divide-border">
+                <li
+                    v-for="t in weekTodos"
+                    :key="t.id"
+                    class="flex items-center gap-2 py-2 text-sm"
+                >
+                    <button
+                        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground"
+                        @click="toggleTodo(t)"
+                    >
+                        <Check class="h-3.5 w-3.5" />
+                    </button>
+                    <Link :href="`/todos/${t.id}`" class="min-w-0 flex-1">
+                        <span class="block truncate">{{ t.title }}</span>
+                        <span
+                            v-if="weekOwner(t)"
+                            class="text-xs font-medium text-blue-600 dark:text-blue-400"
+                        >
+                            {{ weekOwner(t) }}
+                        </span>
+                    </Link>
+                    <span class="shrink-0 text-xs text-muted-foreground">
+                        {{ weekDayLabel(t) }}
+                    </span>
+                </li>
+            </ul>
+        </section>
 
         <!-- 💵 Money strip -->
         <Link href="/money" class="block">

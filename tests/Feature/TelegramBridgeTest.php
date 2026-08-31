@@ -91,12 +91,18 @@ class TelegramBridgeTest extends TestCase
         $this->assertStringContainsString('mushroom idea', $reply);
     }
 
-    public function test_messages_from_other_chats_are_ignored(): void
+    public function test_the_bridge_acts_for_the_user_it_is_handed(): void
     {
-        $reply = app(InboxBridge::class)->handle($this->message('mushroom idea မှတ်ထား', '99999'), $this->user);
+        // Chat authorization is the caller's job (TelegramWebhookController
+        // checks isTelegramAuthorized before delegating), so the bridge itself
+        // is chat-agnostic — it always acts as the user passed to it.
+        // TelegramWebhookTest covers the rejection of unknown chats.
+        $other = User::factory()->withTelegram('99999')->create();
 
-        $this->assertNull($reply);
-        $this->assertSame(0, InboxEvent::count());
+        app(InboxBridge::class)->handle($this->message('mushroom idea မှတ်ထား'), $other);
+
+        $this->assertSame(1, $other->inboxEvents()->count());
+        $this->assertSame(0, $this->user->inboxEvents()->count());
     }
 
     public function test_multiline_message_applies_each_line(): void

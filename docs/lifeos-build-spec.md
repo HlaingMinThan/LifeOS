@@ -402,3 +402,72 @@ walked through the trade-off.
 - **A running Vite dev server makes Inertia SSR issue an HTTP request** to `:5173/__inertia_ssr` during
   a full page render. A bare `Http::assertNothingSent()` in a test that renders an Inertia page will
   catch it — assert about the specific host (`api.telegram.org`) instead.
+
+---
+
+## 13. Team assignment (August 20)
+
+### Why
+
+Life OS was one isolated workspace per account (§11). This adds the one deliberate
+crack in that wall: handing a task to someone else — without handing over anything else.
+
+### The two decisions that shape it
+
+- **Assigned-only visibility.** An owner sees exactly the todos they assigned to a
+  member, never the rest of that member's Life OS. Their money, care tasks, ideas and
+  personal todos stay private. Anything wider and nobody would accept an invite.
+- **One-way assignment.** The owner assigns to members; members cannot assign back or
+  to each other. Membership grants the *member* no sight of the owner at all.
+
+### How it works
+
+- **`team_members`** is the invitation and, once accepted, the membership:
+  `owner_id`, `member_id` (null until they have an account), `email`, `status`
+  (pending/accepted/revoked), unique `token`. Unique on `(owner_id, email)`, so
+  re-inviting reissues the token instead of colliding.
+- **`users.username`** is the `@handle`. Unique, backfilled from name then email local
+  part (`Zayar Win` → `zayarwin`, then `zayarwin2`…).
+- **`todos.assigned_by_id`** — an assigned todo lives in the **assignee's** own list
+  (`user_id`), so it flows through their day view, digest and reminders like anything
+  else. `assigned_by_id` records provenance and is the *only* thing granting the
+  assigner sight of it. Like `user_id` it is never fillable: ownership and provenance
+  both come from the relation, so a request cannot forge either.
+- **`TodoController::findAccessible()`** is the widened lookup — own todos *or* ones I
+  assigned. `focus` deliberately still uses the narrow `find()`: focus is personal.
+- **Mentions are resolved in PHP, not by the parser** (`MentionResolver`). A handle must
+  match one account or none, and resolving it before the call keeps the prompt — and its
+  cost — unchanged. The handle is stripped, then the remainder is parsed normally.
+- Only `add_todo` can be assigned; money and care belong to one person.
+- Notifications ride the existing per-user bots: the assignee is told when work arrives,
+  the assigner when it is completed. Both best-effort — a silent bot never fails the write.
+
+### Invitations
+
+By email (`TeamInvitation` mailable) **and** a copyable link, because `MAIL_MAILER` may be
+unconfigured — the link is the reliable path. Accepting requires the signed-in account's
+address to match the invited one, so a forwarded link cannot be claimed by whoever opens
+it first. Guests get `url.intended` set to the invite, which Fortify consumes after
+login *or* registration, landing them back on it.
+
+Revoking ends the relationship only — the member keeps every task in their own list.
+
+### The week view
+
+Home carries a **This week** card — the next five open todos due in the next seven
+days — and `/todos/week` shows the whole week grouped by day. Both span *me and my
+team*: my own list plus the tasks I assigned out, which is exactly the set I am
+allowed to see. Rows name the teammate a task went to, or who sent it to me.
+`Todo::weekAhead($user)` is the one query behind both, so the card and the page can
+never disagree.
+
+### Landmines
+
+- **`actingAs` persists across requests in a test.** A "guest visits the invite" test
+  right after an authenticated request silently runs authenticated and returns 200
+  instead of a redirect.
+- Two tests were already red on `main` before this branch, left stale by the multi-user
+  merge: authorization moved from `InboxBridge` to `TelegramWebhookController`, which now
+  also *replies* to an unknown sender with their chat id so the owner can authorize them.
+  Both rewritten to assert current behaviour; the guarantee that matters (an unauthorized
+  chat writes nothing) always held.

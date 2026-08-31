@@ -6,6 +6,7 @@ use App\Concerns\BelongsToUser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Todo extends Model
@@ -26,6 +27,44 @@ class Todo extends Model
             'reminded_at' => 'datetime',
             'done_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Who assigned this to me, if anyone. Like user_id this is never fillable —
+     * it is set from the assigning relation, so a request cannot forge
+     * provenance and grant itself sight of someone else's list.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function assignedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_by_id');
+    }
+
+    public function isAssigned(): bool
+    {
+        return $this->assigned_by_id !== null;
+    }
+
+    /**
+     * Open todos due in the next seven days, across everyone this user can
+     * see: their own list plus the tasks they assigned to teammates. Ordered
+     * the way a week reads — soonest first, timed before untimed.
+     */
+    public static function weekAhead(User $user): Builder
+    {
+        return static::query()
+            ->with(['user:id,name,username', 'assignedBy:id,name,username'])
+            ->open()
+            ->where(fn (Builder $q) => $q->where('user_id', $user->id)
+                ->orWhere('assigned_by_id', $user->id))
+            ->whereBetween('due_date', [
+                today()->toDateString(),
+                today()->addDays(6)->toDateString(),
+            ])
+            ->orderBy('due_date')
+            ->orderByRaw('due_time is null')
+            ->orderBy('due_time');
     }
 
     /** Open, has a time, not yet reminded, and that moment has passed. */

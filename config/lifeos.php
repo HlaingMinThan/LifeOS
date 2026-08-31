@@ -39,6 +39,20 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Invited account default password
+    |--------------------------------------------------------------------------
+    |
+    | Accepting an invite creates the account outright so the invitee lands
+    | straight in their Life OS. The password is a known default they are
+    | prompted to change — set INVITE_DEFAULT_PASSWORD to something less
+    | guessable once the team is more than a few trusted people.
+    |
+    */
+
+    'invite_password' => env('INVITE_DEFAULT_PASSWORD', 'password'),
+
     'telegram' => [
         'token' => env('TELEGRAM_BOT_TOKEN'),
         'chat_id' => env('TELEGRAM_CHAT_ID'),

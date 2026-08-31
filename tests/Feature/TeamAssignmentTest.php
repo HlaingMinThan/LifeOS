@@ -1,0 +1,465 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Mail\TeamInvitation;
+use App\Models\LedgerEntry;
+use App\Models\TeamMember;
+use App\Models\Todo;
+use App\Models\User;
+use App\Notifications\BotPush;
+use App\Services\Team\MentionResolver;
+use App\Services\Team\TeamService;
+use App\Services\Telegram\InboxBridge;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
+use Tests\TestCase;
+
+class TeamAssignmentTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $owner;
+
+    private User $member;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Mail::fake();
+        config(['lifeos.parser' => 'fake']);
+
+        $this->owner = User::factory()->create(['name' => 'Boss', 'username' => 'boss']);
+        $this->member = User::factory()->create([
+            'name' => 'Zayar Win', 'username' => 'zayarwin', 'email' => 'zayar@example.com',
+        ]);
+    }
+
+    private function joinTeam(): TeamMember
+    {
+        return $this->owner->teamMembers()->create([
+            'member_id' => $this->member->id,
+            'email' => $this->member->email,
+            'status' => 'accepted',
+            'token' => TeamMember::newToken(),
+            'accepted_at' => now(),
+        ]);
+    }
+
+    // --- invitations -----------------------------------------------------
+
+    public function test_inviting_an_existing_account_links_it_and_mails_them(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/settings/team', ['email' => 'zayar@example.com'])
+            ->assertRedirect();
+
+        $invitation = TeamMember::first();
+        $this->assertSame('pending', $invitation->status);
+        $this->assertSame($this->member->id, $invitation->member_id);
+        Mail::assertSent(TeamInvitation::class);
+    }
+
+    public function test_an_unregistered_email_can_still_be_invited(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/settings/team', ['email' => 'nobody@example.com'])
+            ->assertRedirect();
+
+        $this->assertNull(TeamMember::first()->member_id);
+    }
+
+    public function test_accepting_requires_the_invited_address(): void
+    {
+        $this->actingAs($this->owner)->post('/settings/team', ['email' => 'zayar@example.com']);
+        $token = TeamMember::first()->token;
+        $stranger = User::factory()->create();
+
+        // A forwarded link must not be claimable by whoever opens it.
+        $this->actingAs($stranger)->post("/invite/{$token}")->assertSessionHasErrors('token');
+        $this->assertSame('pending', TeamMember::first()->status);
+
+        $this->actingAs($this->member)->post("/invite/{$token}")->assertRedirect();
+        $this->assertSame('accepted', TeamMember::first()->fresh()->status);
+    }
+
+    public function test_removing_and_reinviting_keeps_the_link_already_shared(): void
+    {
+        $team = app(TeamService::class);
+        $original = $team->invite($this->owner, 'abc@example.com')->token;
+
+        // Remove them, then invite the same address again — a link already
+        // pasted into a chat must not quietly stop working.
+        $team->revoke(TeamMember::first());
+        $reissued = $team->invite($this->owner, 'abc@example.com')->token;
+
+        $this->assertSame($original, $reissued);
+        $this->assertSame(1, TeamMember::count());
+        $this->get("/invite/{$original}")->assertRedirect();
+    }
+
+    public function test_an_unknown_link_explains_itself_instead_of_404ing(): void
+    {
+        $this->actingAs($this->member)->get('/invite/'.str_repeat('x', 48))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('os/Invitation')
+                ->where('status', 'invalid'));
+    }
+
+    // --- mentions --------------------------------------------------------
+
+    public function test_mention_resolves_a_teammate_and_strips_the_handle(): void
+    {
+        $this->joinTeam();
+
+        $result = app(MentionResolver::class)
+            ->resolve('@zayarwin complete 5 content plan on monday', $this->owner);
+
+        $this->assertTrue($result['assignee']?->is($this->member));
+        $this->assertSame('complete 5 content plan on monday', $result['text']);
+    }
+
+    public function test_mention_of_a_non_teammate_does_not_resolve(): void
+    {
+        $stranger = User::factory()->create(['username' => 'stranger']);
+
+        $result = app(MentionResolver::class)->resolve('@stranger do a thing', $this->owner);
+
+        $this->assertNull($result['assignee']);
+        $this->assertSame('stranger', $result['handle']);
+    }
+
+    public function test_parse_reports_an_unknown_handle_instead_of_assigning(): void
+    {
+        $this->actingAs($this->owner)
+            ->postJson('/inbox/parse', ['text' => '@nobody do a thing'])
+            ->assertStatus(422);
+    }
+
+    public function test_assigned_todo_lands_in_the_members_list_not_mine(): void
+    {
+        $this->joinTeam();
+
+        $this->actingAs($this->owner)->postJson('/inbox/apply', [
+            'raw_text' => '@zayarwin send the deck',
+            'parsed' => ['action' => 'add_todo', 'target' => 'send the deck', 'bucket' => 'work'],
+            'assignee_id' => $this->member->id,
+        ])->assertOk()->assertJsonPath('assigned_to', 'Zayar Win');
+
+        $todo = Todo::first();
+        $this->assertSame($this->member->id, $todo->user_id);
+        $this->assertSame($this->owner->id, $todo->assigned_by_id);
+        $this->assertSame(0, $this->owner->todos()->count());
+    }
+
+    public function test_cannot_assign_to_someone_outside_my_team(): void
+    {
+        $stranger = User::factory()->create();
+
+        $this->actingAs($this->owner)->postJson('/inbox/apply', [
+            'raw_text' => 'do a thing',
+            'parsed' => ['action' => 'add_todo', 'target' => 'do a thing'],
+            'assignee_id' => $stranger->id,
+        ])->assertStatus(422);
+
+        $this->assertSame(0, Todo::count());
+    }
+
+    public function test_telegram_mention_assigns_and_confirms(): void
+    {
+        $this->joinTeam();
+
+        $reply = app(InboxBridge::class)->handle(
+            ['chat' => ['id' => '1'], 'text' => '@zayarwin buy dog food tomorrow'],
+            $this->owner,
+        );
+
+        $this->assertStringContainsString('📤 Assigned to Zayar Win', $reply);
+        $this->assertSame($this->member->id, Todo::first()->user_id);
+    }
+
+    public function test_telegram_mention_of_an_unknown_handle_explains_itself(): void
+    {
+        $reply = app(InboxBridge::class)->handle(
+            ['chat' => ['id' => '1'], 'text' => '@ghost do a thing'],
+            $this->owner,
+        );
+
+        $this->assertStringContainsString('No teammate matches @ghost', $reply);
+        $this->assertSame(0, Todo::count());
+    }
+
+    public function test_opening_an_invite_signs_the_new_person_up_and_logs_them_in(): void
+    {
+        $token = app(TeamService::class)
+            ->invite($this->owner, 'zayar.win@example.com')->token;
+
+        // No form: the link is the whole onboarding, landing on settings so
+        // they can fix their name and replace the default password.
+        $this->get("/invite/{$token}")->assertRedirect(route('profile.edit'));
+
+        $invitee = User::where('email', 'zayar.win@example.com')->first();
+        $this->assertNotNull($invitee);
+        $this->assertAuthenticatedAs($invitee);
+        $this->assertSame('Zayar Win', $invitee->name);
+        $this->assertTrue(Hash::check(config('lifeos.invite_password'), $invitee->password));
+
+        // Already on the team, and able to reach the page that changes the
+        // default password (which is gated on a verified address).
+        $this->assertTrue($this->owner->fresh()->canAssignTo($invitee));
+        $this->assertNotNull($invitee->email_verified_at);
+    }
+
+    public function test_an_invite_never_logs_into_an_account_that_already_exists(): void
+    {
+        // Otherwise a forwarded link would be an account takeover.
+        $token = app(TeamService::class)->invite($this->owner, $this->member->email)->token;
+
+        $this->get("/invite/{$token}")->assertRedirect(
+            route('login', ['email' => $this->member->email]),
+        );
+
+        $this->assertGuest();
+        $this->assertSame('pending', TeamMember::first()->status);
+    }
+
+    public function test_team_add_command_creates_a_usable_account(): void
+    {
+        // The manual-DB-edit trap: an "accepted" row with no member_id has no
+        // account behind it. This command does the whole job instead.
+        $this->artisan('team:add', [
+            'owner' => $this->owner->email,
+            'member' => 'zayarwin@gmail.com',
+        ])->assertSuccessful();
+
+        $member = User::where('email', 'zayarwin@gmail.com')->first();
+        $this->assertNotNull($member);
+        $this->assertTrue(Hash::check(config('lifeos.invite_password'), $member->password));
+        $this->assertTrue($this->owner->fresh()->canAssignTo($member));
+
+        // And they can actually sign in with the documented credentials.
+        $this->post('/login', [
+            'email' => 'zayarwin@gmail.com',
+            'password' => config('lifeos.invite_password'),
+        ]);
+        $this->assertAuthenticatedAs($member);
+    }
+
+    public function test_team_add_repairs_a_half_finished_invitation(): void
+    {
+        // Exactly the broken state: accepted by hand, but nobody behind it.
+        $this->owner->teamMembers()->create([
+            'email' => 'zayarwin@gmail.com',
+            'status' => 'accepted',
+            'token' => TeamMember::newToken(),
+            'accepted_at' => now(),
+        ]);
+
+        $this->artisan('team:add', [
+            'owner' => $this->owner->email,
+            'member' => 'zayarwin@gmail.com',
+        ])->assertSuccessful();
+
+        $this->assertSame(1, TeamMember::count());
+        $this->assertNotNull(TeamMember::first()->member_id);
+    }
+
+    // --- notifications ---------------------------------------------------
+
+    public function test_assigning_alerts_the_teammate_on_telegram_and_push(): void
+    {
+        Notification::fake();
+        Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+        $this->member->forceFill(['telegram_bot_token' => 'tok', 'telegram_chat_id' => '55'])->save();
+        $this->joinTeam();
+
+        $this->actingAs($this->owner)->postJson('/inbox/apply', [
+            'raw_text' => '@zayarwin send the deck',
+            'parsed' => ['action' => 'add_todo', 'target' => 'send the deck'],
+            'assignee_id' => $this->member->id,
+        ])->assertOk();
+
+        Http::assertSent(fn ($r) => str_contains($r['text'] ?? '', 'New task from Boss'));
+        Notification::assertSentTo($this->member, BotPush::class);
+    }
+
+    public function test_completing_alerts_the_assigner_on_telegram_and_push(): void
+    {
+        Notification::fake();
+        Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+        $this->owner->forceFill(['telegram_bot_token' => 'tok', 'telegram_chat_id' => '77'])->save();
+        $this->joinTeam();
+
+        $todo = $this->member->todos()->create(['title' => 'send the deck']);
+        $todo->assignedBy()->associate($this->owner)->save();
+
+        // The teammate ticks it off in their own list.
+        $this->actingAs($this->member)->patch("/todos/{$todo->id}/toggle")->assertRedirect();
+
+        Http::assertSent(fn ($r) => str_contains($r['text'] ?? '', 'Zayar Win completed'));
+        Notification::assertSentTo($this->owner, BotPush::class);
+    }
+
+    public function test_push_still_arrives_when_the_assigner_has_no_bot(): void
+    {
+        Notification::fake();
+        Http::fake();
+        $this->joinTeam(); // owner has no telegram configured
+
+        $todo = $this->member->todos()->create(['title' => 'send the deck']);
+        $todo->assignedBy()->associate($this->owner)->save();
+
+        $this->actingAs($this->member)->patch("/todos/{$todo->id}/toggle")->assertRedirect();
+
+        Notification::assertSentTo($this->owner, BotPush::class);
+        Http::assertNothingSent();
+    }
+
+    // --- the week view ---------------------------------------------------
+
+    public function test_week_view_covers_my_todos_and_the_ones_i_assigned(): void
+    {
+        $this->joinTeam();
+
+        $mine = $this->owner->todos()->create([
+            'title' => 'my own task', 'due_date' => today()->addDay(),
+        ]);
+        $theirs = $this->member->todos()->create([
+            'title' => 'their assigned task', 'due_date' => today()->addDays(2),
+        ]);
+        $theirs->assignedBy()->associate($this->owner)->save();
+
+        // Their private task and anything beyond the week stay out.
+        $this->member->todos()->create(['title' => 'their private task', 'due_date' => today()]);
+        $this->owner->todos()->create(['title' => 'next month', 'due_date' => today()->addDays(20)]);
+
+        $this->actingAs($this->owner)->get('/todos/week')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('os/TodoWeek')
+                ->has('todos', 2)
+                ->where('todos.0.title', 'my own task')
+                ->where('todos.1.title', 'their assigned task'));
+    }
+
+    public function test_home_shows_five_of_the_week_with_the_true_total(): void
+    {
+        $this->joinTeam();
+
+        foreach (range(1, 7) as $i) {
+            $this->owner->todos()->create([
+                'title' => "task {$i}", 'due_date' => today()->addDays($i % 6),
+            ]);
+        }
+
+        $this->actingAs($this->owner)->get('/')
+            ->assertInertia(fn ($page) => $page
+                ->has('weekTodos', 5)
+                ->where('weekCount', 7));
+    }
+
+    // --- the privacy boundary -------------------------------------------
+
+    public function test_owner_sees_only_the_todos_they_assigned(): void
+    {
+        $invitation = $this->joinTeam();
+
+        $assigned = $this->member->todos()->create(['title' => 'the assigned one']);
+        $assigned->assignedBy()->associate($this->owner)->save();
+        $this->member->todos()->create(['title' => 'private personal todo']);
+
+        $this->actingAs($this->owner)->get("/settings/team/{$invitation->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('os/TeamMember')
+                ->has('todos', 1)
+                ->where('todos.0.title', 'the assigned one'));
+    }
+
+    public function test_owner_cannot_open_a_members_unassigned_todo(): void
+    {
+        $this->joinTeam();
+        $private = $this->member->todos()->create(['title' => 'private']);
+
+        $this->actingAs($this->owner)->get("/todos/{$private->id}")->assertNotFound();
+        $this->actingAs($this->owner)->patch("/todos/{$private->id}", [
+            'title' => 'hijacked', 'bucket' => 'work',
+        ])->assertNotFound();
+        $this->actingAs($this->owner)->delete("/todos/{$private->id}")->assertNotFound();
+    }
+
+    public function test_being_in_a_team_exposes_nothing_else_of_the_owners(): void
+    {
+        $this->joinTeam();
+        LedgerEntry::factory()->for($this->owner)->create(['title' => 'secret debt']);
+        $ownerTodo = $this->owner->todos()->create(['title' => 'owner private todo']);
+
+        // Membership is one-way: the member gains no sight of the owner at all.
+        $this->actingAs($this->member)->get("/todos/{$ownerTodo->id}")->assertNotFound();
+        $this->actingAs($this->member)->get('/money')
+            ->assertInertia(fn ($page) => $page->has('thisWeek', 0)->has('noDate', 0));
+    }
+
+    public function test_members_cannot_assign_back_to_the_owner(): void
+    {
+        $this->joinTeam();
+
+        // One-way by design: the member has no team of their own.
+        $this->actingAs($this->member)->postJson('/inbox/apply', [
+            'raw_text' => 'do a thing',
+            'parsed' => ['action' => 'add_todo', 'target' => 'do a thing'],
+            'assignee_id' => $this->owner->id,
+        ])->assertStatus(422);
+    }
+
+    // --- assigner rights on what they gave -------------------------------
+
+    public function test_owner_can_edit_and_withdraw_an_assigned_todo(): void
+    {
+        $this->joinTeam();
+        $todo = $this->member->todos()->create(['title' => 'draft', 'bucket' => 'work']);
+        $todo->assignedBy()->associate($this->owner)->save();
+
+        $this->actingAs($this->owner)->get("/todos/{$todo->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('viewerIsAssigner', true));
+
+        $this->actingAs($this->owner)->patch("/todos/{$todo->id}", [
+            'title' => 'clearer brief', 'bucket' => 'work',
+        ])->assertRedirect();
+        $this->assertSame('clearer brief', $todo->fresh()->title);
+
+        $this->actingAs($this->owner)->delete("/todos/{$todo->id}")->assertRedirect();
+        $this->assertSoftDeleted($todo);
+    }
+
+    public function test_assignee_sees_it_as_their_own_task(): void
+    {
+        $this->joinTeam();
+        $todo = $this->member->todos()->create(['title' => 'do it']);
+        $todo->assignedBy()->associate($this->owner)->save();
+
+        $this->actingAs($this->member)->get("/todos/{$todo->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('viewerIsAssigner', false)
+                ->where('todo.assigned_by.name', 'Boss'));
+    }
+
+    public function test_revoking_leaves_the_members_todos_alone(): void
+    {
+        $invitation = $this->joinTeam();
+        $todo = $this->member->todos()->create(['title' => 'still mine']);
+        $todo->assignedBy()->associate($this->owner)->save();
+
+        $this->actingAs($this->owner)->delete("/settings/team/{$invitation->id}")->assertRedirect();
+
+        // The task stays in their list; only the owner's access ends.
+        $this->assertNotSoftDeleted($todo);
+        $this->assertFalse($this->owner->fresh()->canAssignTo($this->member));
+    }
+}

@@ -15,6 +15,7 @@ type Todo = {
     focused: boolean;
     due_date: string | null;
     due_time: string | null;
+    assigned_by?: { id: number; name: string } | null;
 };
 
 /** HTML note → plain text for the one-line row preview. */
@@ -239,6 +240,12 @@ onMounted(() => {
                                     class="mt-0.5 inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
                                 >
                                     {{ BUCKETS[t.bucket] }}
+                                </span>
+                                <span
+                                    v-if="t.assigned_by"
+                                    class="mt-0.5 ml-1 inline-block rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+                                >
+                                    from {{ t.assigned_by.name }}
                                 </span>
                             </Link>
                             <button

@@ -112,8 +112,13 @@ class TelegramWebhookTest extends TestCase
         $this->deliver($this->update(1, 'buy dog food tomorrow', chatId: 99999))
             ->assertNoContent();
 
+        // Nothing is written — that is the security guarantee.
         $this->assertSame(0, Todo::count());
-        Http::assertNothingSent();
+
+        // The only reply is the notice telling them their chat id, so the
+        // owner can authorize them; the message itself is never acted on.
+        Http::assertSent(fn ($request) => str_contains($request['text'] ?? '', "You're not authorized")
+            && str_contains($request['text'] ?? '', '99999'));
     }
 
     public function test_a_non_message_update_is_accepted_quietly(): void
