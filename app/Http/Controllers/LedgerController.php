@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\CategorizeLedgerEntries;
 use App\Models\LedgerEntry;
 use App\Services\Inbox\ClaudeParser;
+use App\Services\Money\ReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,6 +15,8 @@ use Inertia\Response;
 
 class LedgerController extends Controller
 {
+    public function __construct(private ReviewService $review) {}
+
     /** Calendar month view + capped open entry lists. */
     public function index(Request $request): Response
     {
@@ -75,6 +79,10 @@ class LedgerController extends Controller
 
         $noDate = $openEntries->filter(fn ($e) => ! $e->due_date)->values();
 
+        // Glance line for the review card — always the CURRENT month, even
+        // while browsing an older one, so it reads as "how am I doing now".
+        $thisMonth = $this->review->monthSummary($request->user(), now()->format('Y-m'));
+
         return Inertia::render('os/Money', [
             'month' => $start->format('Y-m'),
             'counts' => $counts,
@@ -82,6 +90,14 @@ class LedgerController extends Controller
             'thisWeek' => $thisWeek,
             'later' => $later,
             'noDate' => $noDate,
+            'review' => [
+                'savings_rate' => $thisMonth['savings_rate'],
+                'expenses' => $thisMonth['expenses'],
+                'top_category' => $thisMonth['categories'][0]['category'] ?? null,
+                'indicator' => $this->review->indicator(
+                    $thisMonth, $this->review->outstanding($request->user()),
+                ),
+            ],
         ]);
     }
 
@@ -167,6 +183,8 @@ class LedgerController extends Controller
 
         $request->user()->ledgerEntries()->create($data);
 
+        CategorizeLedgerEntries::dispatch($request->user())->afterResponse();
+
         return back();
     }
 
@@ -191,6 +209,10 @@ class LedgerController extends Controller
         }
 
         $model->update($validated);
+
+        // Retitled entries whose label was never set still deserve one; an
+        // entry the user categorized by hand is left alone (job guards this).
+        CategorizeLedgerEntries::dispatch($request->user())->afterResponse();
 
         return back();
     }
@@ -227,13 +249,22 @@ class LedgerController extends Controller
 
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'direction' => ['required', 'in:payable,receivable'],
             'title' => ['required', 'string', 'max:255'],
             'amount_mmk' => ['required', 'integer', 'min:1'],
             'due_date' => ['nullable', 'date'],
             'note' => ['nullable', 'string', 'max:2000'],
             'image' => ['nullable', 'image', 'max:5120'],
+            'category' => ['nullable', 'string', 'max:60'],
         ]);
+
+        // A cleared category field means "uncategorized", which is null —
+        // an empty string would become its own group in the breakdown.
+        if (array_key_exists('category', $data)) {
+            $data['category'] = trim((string) $data['category']) ?: null;
+        }
+
+        return $data;
     }
 }

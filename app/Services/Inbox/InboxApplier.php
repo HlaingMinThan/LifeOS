@@ -2,6 +2,7 @@
 
 namespace App\Services\Inbox;
 
+use App\Jobs\CategorizeLedgerEntries;
 use App\Models\CareTask;
 use App\Models\Contact;
 use App\Models\InboxEvent;
@@ -21,7 +22,7 @@ class InboxApplier
 {
     public function apply(array $parsed, string $rawText, User $user): InboxEvent
     {
-        return DB::transaction(function () use ($parsed, $rawText, $user) {
+        $event = DB::transaction(function () use ($parsed, $rawText, $user) {
             // Actions that create a record are undone by deleting it;
             // income_received sets this itself (it may match or create).
             $created = in_array($parsed['action'], [
@@ -54,6 +55,16 @@ class InboxApplier
 
             return $event;
         });
+
+        // Every path that records money — Telegram, the magic box, a pasted
+        // brain dump, a screenshot — lands here, so this is the one place
+        // that has to ask for a spending category. Runs after the response,
+        // and batches the whole dump into a single call.
+        if ($event->subject instanceof LedgerEntry) {
+            CategorizeLedgerEntries::dispatch($user)->afterResponse();
+        }
+
+        return $event;
     }
 
     public function undo(InboxEvent $event): void

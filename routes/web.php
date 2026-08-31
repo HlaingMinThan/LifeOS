@@ -7,6 +7,7 @@ use App\Http\Controllers\InboxController;
 use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\OnboardController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TodoController;
 use Illuminate\Support\Facades\Route;
@@ -22,6 +23,9 @@ Route::middleware(['auth'])->group(function () {
     Route::inertia('/profile', 'os/Profile')->name('profile');
 
     Route::get('/money', [LedgerController::class, 'index'])->name('money');
+    // Before /money/day/{date} would happily swallow "review" as a date.
+    Route::get('/money/review', [ReviewController::class, 'index'])->name('money.review');
+    Route::post('/money/categories/rename', [ReviewController::class, 'rename'])->name('money.categories.rename');
     Route::get('/money/day/{date}', [LedgerController::class, 'day'])->name('money.day');
     Route::post('/ledger/parse-screenshot', [LedgerController::class, 'parseScreenshot'])->name('ledger.parse-screenshot');
     Route::post('/ledger', [LedgerController::class, 'store'])->name('ledger.store');

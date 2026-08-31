@@ -8,6 +8,7 @@ use App\Services\Inbox\BrainDumpParser;
 use App\Services\Inbox\ClaudeParser;
 use App\Services\Inbox\InboxApplier;
 use App\Services\Inbox\ParserContract;
+use App\Services\Money\ReviewService;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
@@ -39,6 +40,7 @@ class InboxBridge
         private InboxApplier $applier,
         private DigestBuilder $digest,
         private TelegramClient $telegram,
+        private ReviewService $review,
     ) {}
 
     /**
@@ -71,8 +73,9 @@ class InboxBridge
 
         // Commands work with or without the slash: "today", "/today", "tdy"…
         return match (strtolower(ltrim($text, '/'))) {
-            'start', 'help' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\nCommands (slash optional): today/tdy · tomorrow/tmr · yesterday · todobydate · care · idea · undo",
+            'start', 'help' => "Life OS ready 🚀\nType things like \"paid gon khaung 500k\" or \"mom အတွက် ဆေးဝယ်ရန်\".\nCommands (slash optional): today/tdy · tomorrow/tmr · yesterday · todobydate · review · care · idea · undo",
             'today', 'tdy' => $this->digest->build($user),
+            'review', 'money' => $this->moneyReview($user),
             'tomorrow', 'tmr' => $this->digest->forDate($user, today()->addDay()),
             'yesterday' => $this->digest->forDate($user, today()->subDay()),
             'todobydate' => $this->askForDate($user),
@@ -275,6 +278,75 @@ class InboxBridge
         return in_array($parsed['action'], ['add_payable', 'add_receivable', 'income_received'])
             ? ' 📅 no date'
             : '';
+    }
+
+    /** /review — the money health check as text. */
+    private function moneyReview(User $user): string
+    {
+        $month = $this->review->monthSummary($user, now()->format('Y-m'));
+        $outstanding = $this->review->outstanding($user);
+        $indicator = $this->review->indicator($month, $outstanding);
+        $week = $this->review->weekSummary($user);
+
+        $ks = fn (int $n) => number_format($n).' Ks';
+
+        $lines = [
+            "📊 Money review — {$month['label']}",
+            '',
+            '💵 In    '.$ks($month['income']),
+            '💸 Out   '.$ks($month['expenses']),
+            '💰 Kept  '.$ks($month['net'])
+                .($month['savings_rate'] !== null ? " ({$month['savings_rate']}%)" : ''),
+        ];
+
+        if ($month['change']['expenses'] !== null) {
+            $delta = $month['change']['expenses'];
+            $arrow = $delta > 0 ? '▲' : ($delta < 0 ? '▼' : '=');
+            $lines[] = "   spending {$arrow} ".abs($delta)."% vs {$month['previous']['label']}";
+        }
+
+        $lines[] = '';
+        $lines[] = "{$indicator['emoji']} {$indicator['message']}";
+
+        if ($month['categories']) {
+            $lines[] = '';
+            $lines[] = '📦 Where it went:';
+            foreach (array_slice($month['categories'], 0, 6) as $row) {
+                $share = isset($row['share']) ? " ({$row['share']}%)" : '';
+                $lines[] = "  • {$row['category']} — ".$ks($row['total']).$share;
+            }
+        }
+
+        if ($week['expenses'] || $week['income']) {
+            $lines[] = '';
+            $lines[] = "📅 This week ({$week['label']}): out ".$ks($week['expenses'])
+                .' · in '.$ks($week['income']);
+            foreach (array_slice($week['categories'], 0, 4) as $row) {
+                $lines[] = "  • {$row['category']} — ".$ks($row['total']);
+            }
+        }
+
+        $owed = [
+            '🔴 Overdue' => $outstanding['overdue'],
+            '📆 This week' => $outstanding['this_week'],
+        ];
+
+        $rows = [];
+        foreach ($owed as $label => $bucket) {
+            foreach (['payable' => 'to pay', 'receivable' => 'to collect'] as $key => $word) {
+                if ($bucket[$key]['count'] > 0) {
+                    $rows[] = "  {$label}: {$bucket[$key]['count']} {$word} · ".$ks($bucket[$key]['total']);
+                }
+            }
+        }
+
+        if ($rows) {
+            $lines[] = '';
+            $lines[] = '⚠️ Outstanding:';
+            array_push($lines, ...$rows);
+        }
+
+        return implode("\n", $lines);
     }
 
     private function listCareTasks(User $user): string
