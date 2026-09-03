@@ -18,6 +18,9 @@ return [
     'anthropic' => [
         'key' => env('ANTHROPIC_API_KEY'),
         'model' => env('INBOX_MODEL', 'claude-sonnet-5'),
+        // Naming a spending category is a one-word classification, not a
+        // parse — the small model is accurate enough and far cheaper.
+        'fast_model' => env('CATEGORY_MODEL', 'claude-haiku-4-5'),
     ],
 
     /*

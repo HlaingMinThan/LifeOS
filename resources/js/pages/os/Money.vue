@@ -14,6 +14,7 @@ type Entry = {
     status: string;
     due_date: string | null;
     note: string | null;
+    category: string | null;
     contact?: { name: string } | null;
 };
 
@@ -26,9 +27,24 @@ const props = defineProps<{
     thisWeek: Entry[];
     later: Entry[];
     noDate: Entry[];
+    review: {
+        savings_rate: number | null;
+        expenses: number;
+        month: string;
+        month_label: string;
+        top_category: string | null;
+        indicator: { level: string; emoji: string; message: string };
+    };
 }>();
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+const REVIEW_RING: Record<string, string> = {
+    good: 'border-green-500/40 bg-green-500/5',
+    watch: 'border-amber-500/40 bg-amber-500/5',
+    bad: 'border-rose-500/40 bg-rose-500/5',
+    none: 'border-border bg-card',
+};
 
 const year = computed(() => Number(props.month.slice(0, 4)));
 const monthIndex = computed(() => Number(props.month.slice(5, 7)) - 1);
@@ -63,6 +79,7 @@ const form = reactive({
     amount_mmk: null as number | null,
     due_date: '',
     note: '',
+    category: '',
 });
 
 // Screenshot upload state
@@ -85,6 +102,7 @@ function startNew(direction: string = 'payable') {
     form.amount_mmk = null;
     form.due_date = '';
     form.note = '';
+    form.category = '';
     imageFile.value = null;
     imagePreview.value = null;
     storedImagePath.value = null;
@@ -101,6 +119,7 @@ function startEdit(e: Entry) {
     form.amount_mmk = e.amount_mmk;
     form.due_date = e.due_date?.slice(0, 10) ?? '';
     form.note = e.note ?? '';
+    form.category = e.category ?? '';
     imageFile.value = null;
     imagePreview.value = null;
     storedImagePath.value = null;
@@ -174,6 +193,7 @@ function saveForm() {
     data.append('amount_mmk', String(form.amount_mmk ?? ''));
     data.append('due_date', form.due_date || '');
     data.append('note', form.note || '');
+    data.append('category', form.category || '');
 
     // If we have a stored image path from parse-screenshot, send it.
     // If the user picked a new file manually (without parsing), upload it.
@@ -313,6 +333,12 @@ const groups = computed(() =>
             placeholder="Note... (optional)"
             class="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
         ></textarea>
+        <input
+            v-model="form.category"
+            type="text"
+            placeholder="Category (leave blank — AI names it)"
+            class="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
 
         <!-- Attach screenshot if form opened without one -->
         <div v-if="!imagePreview" class="flex items-center gap-2">
@@ -342,6 +368,31 @@ const groups = computed(() =>
         </div>
     </div>
     </Transition>
+
+    <!-- Review glance: this month's health, always current month -->
+    <Link
+        :href="`/money/review?month=${review.month}`"
+        class="mt-4 flex items-center gap-3 rounded-xl border p-3"
+        :class="REVIEW_RING[review.indicator.level]"
+    >
+        <span class="text-xl leading-none">{{ review.indicator.emoji }}</span>
+        <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium">
+                Kept
+                <span class="font-bold">{{
+                    review.savings_rate === null ? '—' : review.savings_rate + '%'
+                }}</span>
+                in {{ review.month_label }}
+                <span v-if="review.top_category" class="text-muted-foreground">
+                    · most on {{ review.top_category }}
+                </span>
+            </p>
+            <p class="truncate text-xs text-muted-foreground">
+                {{ review.indicator.message }}
+            </p>
+        </div>
+        <ChevronRight class="h-4 w-4 shrink-0 text-muted-foreground" />
+    </Link>
 
     <!-- Open balance summary -->
     <div v-if="allOpen.length" class="mt-4 grid grid-cols-3 gap-2">
@@ -452,7 +503,7 @@ const groups = computed(() =>
                             >
                                 <Check class="h-4 w-4" />
                             </button>
-                            <div class="min-w-0 flex-1">
+                            <Link :href="`/ledger/${e.id}`" class="min-w-0 flex-1">
                                 <div class="flex items-baseline justify-between gap-2">
                                     <p class="truncate text-sm font-medium">{{ e.title }}</p>
                                     <p
@@ -472,7 +523,13 @@ const groups = computed(() =>
                                 <p v-if="e.note" class="truncate text-xs text-muted-foreground/70">
                                     {{ e.note }}
                                 </p>
-                            </div>
+                                <span
+                                    v-if="e.category"
+                                    class="mt-1 inline-block rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                                >
+                                    {{ e.category }}
+                                </span>
+                            </Link>
                             <button class="shrink-0 p-2 text-muted-foreground/60" @click="startEdit(e)">
                                 <Pencil class="h-4 w-4" />
                             </button>

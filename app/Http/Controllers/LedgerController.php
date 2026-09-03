@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\CategorizeLedgerEntries;
 use App\Models\LedgerEntry;
 use App\Services\Inbox\ClaudeParser;
+use App\Services\Money\CategorizerService;
+use App\Services\Money\ReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,6 +16,8 @@ use Inertia\Response;
 
 class LedgerController extends Controller
 {
+    public function __construct(private ReviewService $review) {}
+
     /** Calendar month view + capped open entry lists. */
     public function index(Request $request): Response
     {
@@ -75,6 +80,14 @@ class LedgerController extends Controller
 
         $noDate = $openEntries->filter(fn ($e) => ! $e->due_date)->values();
 
+        // Glance line for the review card. Independent of the calendar month
+        // being browsed — it answers "how am I doing", not "what am I looking
+        // at" — and falls back to the last active month so the 1st of a month
+        // does not blank it out.
+        $thisMonth = $this->review->monthSummary(
+            $request->user(), $this->review->latestActiveMonth($request->user()),
+        );
+
         return Inertia::render('os/Money', [
             'month' => $start->format('Y-m'),
             'counts' => $counts,
@@ -82,6 +95,16 @@ class LedgerController extends Controller
             'thisWeek' => $thisWeek,
             'later' => $later,
             'noDate' => $noDate,
+            'review' => [
+                'savings_rate' => $thisMonth['savings_rate'],
+                'expenses' => $thisMonth['expenses'],
+                'month' => $thisMonth['month'],
+                'month_label' => $thisMonth['label'],
+                'top_category' => $thisMonth['categories'][0]['category'] ?? null,
+                'indicator' => $this->review->indicator(
+                    $thisMonth, $this->review->outstanding($request->user()),
+                ),
+            ],
         ]);
     }
 
@@ -103,6 +126,19 @@ class LedgerController extends Controller
         return Inertia::render('os/MoneyDay', [
             'date' => $date,
             'entries' => $all,
+        ]);
+    }
+
+    /** One entry in full: the screenshot, the note, and everything editable. */
+    public function show(Request $request, int $entry): Response
+    {
+        $model = $this->find($request, $entry)->load('contact');
+
+        return Inertia::render('os/MoneyEntry', [
+            'entry' => $model,
+            // The labels already in use, so re-categorizing is a tap rather
+            // than retyping a name that has to match exactly to group.
+            'categories' => app(CategorizerService::class)->existingCategories($request->user()),
         ]);
     }
 
@@ -167,6 +203,8 @@ class LedgerController extends Controller
 
         $request->user()->ledgerEntries()->create($data);
 
+        CategorizeLedgerEntries::dispatch($request->user())->afterResponse();
+
         return back();
     }
 
@@ -192,6 +230,10 @@ class LedgerController extends Controller
 
         $model->update($validated);
 
+        // Retitled entries whose label was never set still deserve one; an
+        // entry the user categorized by hand is left alone (job guards this).
+        CategorizeLedgerEntries::dispatch($request->user())->afterResponse();
+
         return back();
     }
 
@@ -209,12 +251,22 @@ class LedgerController extends Controller
     public function destroy(Request $request, int $entry): RedirectResponse
     {
         $model = $this->find($request, $entry);
+        $settledOn = ($model->paid_at ?? $model->due_date)?->toDateString();
 
         if ($model->image) {
             Storage::disk('public')->delete($model->image);
         }
 
         $model->delete();
+
+        // Deleting from the entry's own detail page: back() would return to a
+        // page that no longer exists. Send them to the day it belonged to.
+        // Other callers (the money and day lists) keep their place via back().
+        if ($request->query('from') === 'detail') {
+            return $settledOn
+                ? redirect()->route('money.day', $settledOn)
+                : redirect()->route('money');
+        }
 
         return back();
     }
@@ -227,13 +279,22 @@ class LedgerController extends Controller
 
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'direction' => ['required', 'in:payable,receivable'],
             'title' => ['required', 'string', 'max:255'],
             'amount_mmk' => ['required', 'integer', 'min:1'],
             'due_date' => ['nullable', 'date'],
             'note' => ['nullable', 'string', 'max:2000'],
             'image' => ['nullable', 'image', 'max:5120'],
+            'category' => ['nullable', 'string', 'max:60'],
         ]);
+
+        // A cleared category field means "uncategorized", which is null —
+        // an empty string would become its own group in the breakdown.
+        if (array_key_exists('category', $data)) {
+            $data['category'] = trim((string) $data['category']) ?: null;
+        }
+
+        return $data;
     }
 }

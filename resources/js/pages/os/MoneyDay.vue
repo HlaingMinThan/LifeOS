@@ -244,7 +244,7 @@ const lightboxSrc = ref<string | null>(null);
                         </div>
 
                         <!-- Details -->
-                        <div class="min-w-0 flex-1">
+                        <Link :href="`/ledger/${e.id}`" class="min-w-0 flex-1">
                             <div class="flex items-baseline justify-between gap-2">
                                 <p class="truncate text-sm font-medium">
                                     {{ e.title }}
@@ -260,7 +260,7 @@ const lightboxSrc = ref<string | null>(null);
                             <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
                                 {{ e.contact.name }}
                             </p>
-                        </div>
+                        </Link>
 
                         <!-- Screenshot thumb -->
                         <img
@@ -317,7 +317,7 @@ const lightboxSrc = ref<string | null>(null);
                             >
                                 <Check class="h-4 w-4" />
                             </button>
-                            <div class="min-w-0 flex-1">
+                            <Link :href="`/ledger/${e.id}`" class="min-w-0 flex-1">
                                 <div class="flex items-baseline justify-between gap-2">
                                     <p class="truncate text-sm font-medium">
                                         {{ e.title }}
@@ -330,7 +330,7 @@ const lightboxSrc = ref<string | null>(null);
                                 <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
                                     {{ e.contact.name }}
                                 </p>
-                            </div>
+                            </Link>
                             <button class="shrink-0 p-1 text-muted-foreground/50" @click="startEdit(e)">
                                 <Pencil class="h-3.5 w-3.5" />
                             </button>
@@ -353,7 +353,7 @@ const lightboxSrc = ref<string | null>(null);
                             >
                                 <Check class="h-4 w-4" />
                             </button>
-                            <div class="min-w-0 flex-1">
+                            <Link :href="`/ledger/${e.id}`" class="min-w-0 flex-1">
                                 <div class="flex items-baseline justify-between gap-2">
                                     <p class="truncate text-sm font-medium">
                                         {{ e.title }}
@@ -366,7 +366,7 @@ const lightboxSrc = ref<string | null>(null);
                                 <p v-if="e.contact && e.contact.name !== e.title" class="text-xs text-muted-foreground">
                                     {{ e.contact.name }}
                                 </p>
-                            </div>
+                            </Link>
                             <button class="shrink-0 p-1 text-muted-foreground/50" @click="startEdit(e)">
                                 <Pencil class="h-3.5 w-3.5" />
                             </button>

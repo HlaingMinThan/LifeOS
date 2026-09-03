@@ -7,6 +7,7 @@ use App\Http\Controllers\InboxController;
 use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\OnboardController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TodoController;
@@ -28,9 +29,19 @@ Route::middleware(['auth'])->group(function () {
     Route::inertia('/profile', 'os/Profile')->name('profile');
 
     Route::get('/money', [LedgerController::class, 'index'])->name('money');
+    // Before /money/day/{date} would happily swallow "review" as a date.
+    Route::get('/money/review', [ReviewController::class, 'index'])->name('money.review');
+    // ?name= rather than a path segment: category labels carry spaces and "&".
+    Route::get('/money/category', [ReviewController::class, 'category'])->name('money.category');
+    Route::post('/money/categories/rename', [ReviewController::class, 'rename'])->name('money.categories.rename');
+    // Detection is free and rides on the review page; only naming costs.
+    Route::post('/money/patterns/name', [ReviewController::class, 'nameSuggestions'])->name('money.patterns.name');
+    Route::post('/money/patterns/apply', [ReviewController::class, 'applySuggestion'])->name('money.patterns.apply');
+    Route::post('/money/patterns/dismiss', [ReviewController::class, 'dismissSuggestion'])->name('money.patterns.dismiss');
     Route::get('/money/day/{date}', [LedgerController::class, 'day'])->name('money.day');
     Route::post('/ledger/parse-screenshot', [LedgerController::class, 'parseScreenshot'])->name('ledger.parse-screenshot');
     Route::post('/ledger', [LedgerController::class, 'store'])->name('ledger.store');
+    Route::get('/ledger/{entry}', [LedgerController::class, 'show'])->whereNumber('entry')->name('ledger.show');
     Route::patch('/ledger/{entry}/toggle', [LedgerController::class, 'toggle'])->name('ledger.toggle');
     Route::patch('/ledger/{entry}', [LedgerController::class, 'update'])->name('ledger.update');
     Route::delete('/ledger/{entry}', [LedgerController::class, 'destroy'])->name('ledger.destroy');
