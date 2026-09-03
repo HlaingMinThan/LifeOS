@@ -45,6 +45,9 @@ class ReviewController extends Controller
             // along on every load. Naming them is what costs, and that waits
             // for a tap.
             'patterns' => $this->patterns->detect($user),
+            // Every label in use, so fixing a cluster is picking from a list
+            // rather than retyping a name that has to match exactly to group.
+            'knownCategories' => $this->categorizer->existingCategories($user),
         ]);
     }
 

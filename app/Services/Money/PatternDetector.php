@@ -59,6 +59,14 @@ class PatternDetector
             'count' => $group->count(),
             'total' => (int) $group->sum('amount_mmk'),
             'current' => $categories->map(fn (?string $c) => $c ?? LedgerEntry::UNCATEGORIZED)->all(),
+            // The answer is usually already here: when a merchant is half
+            // filed and half not, the label it does carry is the one meant for
+            // all of it. Offering that up front turns most of these into one
+            // tap instead of a blank box and a guess.
+            'suggested' => $group->pluck('category')->filter()
+                ->countBy()->sortDesc()->keys()->first(),
+            // What it is already filed under, for one-tap chips.
+            'options' => $labelled->all(),
             // The model reads these to name the merchant.
             'samples' => $group->take(4)->map(fn (LedgerEntry $e) => trim(
                 $e->title.' '.($e->note ?? '')

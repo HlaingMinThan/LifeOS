@@ -10,7 +10,7 @@ import {
     TrendingDown,
     TrendingUp,
 } from 'lucide-vue-next';
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { apiPost } from '@/lib/api';
 import { formatMmk } from '@/lib/format';
 
@@ -37,6 +37,10 @@ type Pattern = {
     count: number;
     total: number;
     current: string[];
+    /** Labels this merchant already carries — the likely answer. */
+    options: string[];
+    /** The most common of those, pre-filled into the box. */
+    suggested: string | null;
     conflicted: boolean;
     unlabelled: boolean;
 };
@@ -58,6 +62,7 @@ const props = defineProps<{
     outstanding: Outstanding;
     indicator: { level: string; emoji: string; message: string };
     patterns: Pattern[];
+    knownCategories: string[];
 }>();
 
 // Colour tracks meaning, not sign: for expenses "up" is bad, for income good.
@@ -119,6 +124,26 @@ const owedRows = computed(() =>
 const drafts = reactive<Record<string, string>>({});
 const naming = ref(false);
 const nameError = ref('');
+
+// Start each box on the label the merchant already carries, so the usual fix
+// ("half of these say Loans, the rest say nothing") is a single tap on
+// "Move all" rather than a blank field to puzzle over.
+watch(
+    () => props.patterns,
+    (patterns) => {
+        for (const p of patterns) {
+            if (drafts[p.key] === undefined) drafts[p.key] = p.suggested ?? '';
+        }
+    },
+    { immediate: true },
+);
+
+// Its own labels first — those are the likely answer — then everything else
+// in use, so picking never invents a near-duplicate like "Food" vs "Foods".
+const chipsFor = (p: Pattern) => [
+    ...p.options,
+    ...props.knownCategories.filter((c) => !p.options.includes(c)),
+];
 
 async function nameAll() {
     naming.value = true;
@@ -299,6 +324,10 @@ function saveRename() {
                 {{ naming ? 'Thinking…' : 'Suggest names' }}
             </button>
         </div>
+        <p class="mt-1 text-xs text-muted-foreground">
+            The same person or shop filed under different categories. Pick one
+            and every entry moves — and it stays filed that way from now on.
+        </p>
         <p v-if="nameError" class="mt-1 text-xs text-rose-400">{{ nameError }}</p>
 
         <ul class="mt-2 space-y-2">
@@ -322,11 +351,28 @@ function saveRename() {
                     <template v-else>all unlabelled</template>
                 </p>
 
+                <!-- One tap for the common case: a label it already carries. -->
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                    <button
+                        v-for="c in chipsFor(p)"
+                        :key="c"
+                        class="rounded-full border px-2 py-1 text-xs"
+                        :class="
+                            drafts[p.key] === c
+                                ? 'border-primary bg-primary/10 font-medium text-primary'
+                                : 'border-border text-muted-foreground'
+                        "
+                        @click="drafts[p.key] = c"
+                    >
+                        {{ c }}
+                    </button>
+                </div>
+
                 <div class="mt-2 flex items-center gap-2">
                     <input
                         v-model="drafts[p.key]"
                         type="text"
-                        placeholder="Category name"
+                        placeholder="or type a new category"
                         class="min-w-0 flex-1 rounded-lg border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
                         @keyup.enter="applyPattern(p)"
                     />

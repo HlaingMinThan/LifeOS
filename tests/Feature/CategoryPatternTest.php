@@ -71,6 +71,54 @@ class CategoryPatternTest extends TestCase
         $this->assertTrue($this->detect()[0]['conflicted']);
     }
 
+    /** A blank box is a puzzle; the label it already carries is the answer. */
+    public function test_the_label_it_already_carries_is_offered_up_front(): void
+    {
+        $this->entry('Yaminhtet', 'Loans');
+        $this->entry('Yaminhtet', null);
+
+        $found = $this->detect()[0];
+
+        $this->assertSame('Loans', $found['suggested']);
+        $this->assertSame(['Loans'], $found['options']);
+    }
+
+    public function test_the_most_used_label_wins_when_they_disagree(): void
+    {
+        $this->entry('Buy DataPack U9', 'Shopping');
+        $this->entry('Buy DataPack U9', 'Shopping');
+        $this->entry('Buy DataPack U9', 'Business');
+
+        $found = $this->detect()[0];
+
+        $this->assertSame('Shopping', $found['suggested']);
+        $this->assertEqualsCanonicalizing(['Shopping', 'Business'], $found['options']);
+    }
+
+    public function test_a_wholly_unlabelled_merchant_has_nothing_to_offer(): void
+    {
+        $this->entry('Arkar', null);
+        $this->entry('Arkar', null);
+
+        $found = $this->detect()[0];
+
+        $this->assertNull($found['suggested']);
+        $this->assertSame([], $found['options']);
+    }
+
+    public function test_review_page_carries_the_labels_available_to_pick(): void
+    {
+        $this->entry('Max Energy-Thein Phyu', 'Shopping');
+        $this->entry('Max Energy-Sanchaung', 'Business');
+
+        $this->actingAs($this->user)->get('/money/review')
+            ->assertInertia(fn ($page) => $page
+                ->where('knownCategories', ['Business', 'Shopping'])
+                // Tied on count, so the earliest entry's label wins — stable,
+                // because detection reads entries in id order.
+                ->where('patterns.0.suggested', 'Shopping'));
+    }
+
     public function test_a_merchant_with_no_labels_at_all_is_flagged(): void
     {
         $this->entry('Arkar', null);
