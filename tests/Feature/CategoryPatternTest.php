@@ -306,20 +306,27 @@ class CategoryPatternTest extends TestCase
         $this->assertSame('Food & Drinks', $unknown->fresh()->category);
     }
 
-    /** A dismissal silences suggestions; it must not file anything. */
-    public function test_a_dismissal_rule_does_not_categorize(): void
+    /**
+     * A dismissal only silences the suggestion. It files nothing itself, and
+     * it does not freeze the merchant either — new entries are categorized
+     * normally, so the user stops being nagged without losing the labelling.
+     */
+    public function test_a_dismissal_silences_without_filing_or_freezing(): void
     {
         CategoryRule::create([
             'user_id' => $this->user->id,
-            'cluster_key' => 'title:arkar',
+            'cluster_key' => 'title:lunch at',
             'category' => null,
-            'label' => 'Arkar',
+            'label' => 'Lunch',
         ]);
-        $entry = $this->entry('Arkar something', null);
+        $entry = $this->entry('lunch at shop', null);
 
         app(CategorizerService::class)->categorize($this->user, collect([$entry]));
 
-        $this->assertNull($entry->fresh()->category);
+        // Categorized by the model, not by the rule — a dismissal carries no
+        // category to apply.
+        $this->assertSame('Food & Drinks', $entry->fresh()->category);
+        $this->assertSame([], $this->detect());
     }
 
     // --- Naming ----------------------------------------------------------
