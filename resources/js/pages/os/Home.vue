@@ -656,14 +656,16 @@ function dismiss() {
             </Link>
         </section>
 
-        <!-- 📌 Today -->
-        <Link :href="`/todos/day/${todayIso}`" class="block">
-            <section class="rounded-xl border border-border bg-card p-4">
+        <!-- 📌 Today. Not wrapped in one card-wide link: each todo opens its
+             own detail, and a link cannot sit inside another link. -->
+        <section class="rounded-xl border border-border bg-card p-4">
                 <h2
                     class="flex items-center justify-between text-sm font-medium text-muted-foreground"
                 >
                     📌 Today
-                    <span class="text-xs">day page →</span>
+                    <Link :href="`/todos/day/${todayIso}`" class="text-xs">
+                        day page →
+                    </Link>
                 </h2>
                 <p
                     v-if="!todayTodos.length && !careToday.length"
@@ -685,16 +687,17 @@ function dismiss() {
                                     ? 'border-green-500/40 bg-green-500/10 text-green-500'
                                     : 'border-border text-muted-foreground'
                             "
-                            @click.prevent.stop="toggleTodo(t)"
+                            @click="toggleTodo(t)"
                         >
                             <Check class="h-3.5 w-3.5" />
                         </button>
-                        <span
+                        <Link
+                            :href="`/todos/${t.id}`"
                             class="min-w-0 flex-1 truncate"
                             :class="{ 'line-through': t.status === 'done' }"
                         >
                             {{ t.title }}
-                        </span>
+                        </Link>
                         <button
                             v-if="t.status !== 'done'"
                             class="shrink-0 p-1"
@@ -703,7 +706,7 @@ function dismiss() {
                                     ? 'text-primary'
                                     : 'text-muted-foreground/50'
                             "
-                            @click.prevent.stop="setFocus(t)"
+                            @click="setFocus(t)"
                         >
                             <Target class="h-4 w-4" />
                         </button>
@@ -722,8 +725,7 @@ function dismiss() {
                         💗 {{ t.title }}
                     </li>
                 </ul>
-            </section>
-        </Link>
+        </section>
 
         <!-- 📆 This week: mine plus what I handed to the team -->
         <section v-if="weekTodos.length" class="rounded-xl border border-border bg-card p-4">
